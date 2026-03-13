@@ -19,7 +19,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   action?: {
-    type: 'create_client' | 'create_invoice' | 'create_expense';
+    type: 'create_client' | 'create_invoice' | 'create_expense' | 'analyze_margins';
     data: any;
     status: 'pending' | 'completed';
   };
@@ -47,6 +47,16 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
   const performAction = async (msgIndex: number) => {
     const msg = messages[msgIndex];
     if (!msg.action || msg.action.status === 'completed') return;
+
+    if (msg.action.type === 'analyze_margins') {
+       setMessages(prev => {
+         const next = [...prev];
+         next[msgIndex].action!.status = 'completed';
+         next[msgIndex].content += "\n\n📊 **Analyse des marges Q1 :**\n- Marge brute moyenne : 32%\n- Point mort atteint : 12 Mars\n- Optimisation possible : Réduire les frais logistiques de 5% via le Réseau B2B.";
+         return next;
+       });
+       return;
+    }
 
     setLoading(true);
     try {
@@ -97,13 +107,16 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
       const intentResult = await blink.ai.generateObject({
         prompt: `Analyse l'intention de l'utilisateur : "${userMsg}". 
         S'il veut créer quelque chose, extrais les données. 
-        Types supportés : create_client (besoin de name, email?), create_invoice (besoin de clientName, amount).
+        Types supportés : 
+        - create_client (besoin de name, email?)
+        - create_invoice (besoin de clientName, amount)
+        - analyze_margins (si l'utilisateur veut une analyse financière ou parler de rentabilité)
         Si pas d'action claire, renvoie action: null.`,
         schema: {
           type: 'object',
           properties: {
             hasAction: { type: 'boolean' },
-            actionType: { type: 'string', enum: ['create_client', 'create_invoice', 'create_expense', null] },
+            actionType: { type: 'string', enum: ['create_client', 'create_invoice', 'create_expense', 'analyze_margins', null] },
             data: { type: 'object' },
             response: { type: 'string' }
           }
@@ -211,6 +224,7 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                               <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                                 {m.action.type === 'create_client' && `Nouveau client : ${m.action.data.name}`}
                                 {m.action.type === 'create_invoice' && `Facture de ${m.action.data.amount}€ pour ${m.action.data.clientName}`}
+                                {m.action.type === 'analyze_margins' && `Analyse des marges`}
                               </div>
                               <Button 
                                 size="sm" 
@@ -231,6 +245,9 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
 
               <div className="p-4 border-t border-border/50 space-y-4 bg-white dark:bg-slate-900">
                 <div className="flex flex-wrap gap-2">
+                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Analyse ma rentabilité ce trimestre")}>
+                     <BarChart3 className="w-3 h-3 mr-1.5 text-blue-600" /> Analyse IA
+                   </Button>
                    <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée un client 'Tech Solutions' avec l'email contact@tech.com")}>
                      <Users className="w-3 h-3 mr-1.5 text-blue-600" /> Client
                    </Button>

@@ -18,10 +18,16 @@ import {
   Building2,
   ArrowRight,
   Landmark,
-  Receipt
+  Receipt,
+  TrendingUp,
+  Network,
+  Share2,
+  Handshake
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
 
 const FeatureItem = ({ icon: Icon, title, description, color }: any) => (
   <motion.div 
@@ -37,7 +43,17 @@ const FeatureItem = ({ icon: Icon, title, description, color }: any) => (
 );
 
 const Navbar = () => {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleCta = () => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    } else {
+      login();
+    }
+  };
+
   return (
     <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -56,9 +72,11 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={login} className="text-slate-600 font-bold hover:text-blue-600">Connexion</Button>
-          <Button onClick={login} className="rounded-full px-8 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 h-12 font-bold text-white">
-            Essai gratuit
+          <Button variant="ghost" onClick={handleCta} className="text-slate-600 font-bold hover:text-blue-600">
+            {isAuthenticated ? 'Dashboard' : 'Connexion'}
+          </Button>
+          <Button onClick={handleCta} className="rounded-full px-8 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 h-12 font-bold text-white">
+            {isAuthenticated ? 'Aller au Dashboard' : 'Essai gratuit'}
           </Button>
         </div>
       </div>
@@ -67,7 +85,16 @@ const Navbar = () => {
 };
 
 export const LandingPage = () => {
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleCta = () => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    } else {
+      login();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 selection:bg-blue-100 text-slate-900 font-sans">
@@ -99,7 +126,7 @@ export const LandingPage = () => {
                 FusionBiz combine ERP, Comptabilité type Indy, et Automatisation type n8n dans une plateforme unique propulsée par l'IA.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4">
-                <Button size="lg" onClick={login} className="w-full sm:w-auto rounded-full px-10 h-16 text-lg font-black bg-blue-600 hover:bg-blue-700 shadow-2xl shadow-blue-200 text-white group">
+                <Button size="lg" onClick={handleCta} className="w-full sm:w-auto rounded-full px-10 h-16 text-lg font-black bg-blue-600 hover:bg-blue-700 shadow-2xl shadow-blue-200 text-white group">
                   Démarrer maintenant <ChevronRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
                 <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-full px-10 h-16 text-lg font-bold border-2 border-slate-200 hover:bg-slate-50">
@@ -269,7 +296,7 @@ export const LandingPage = () => {
                   </li>
                 ))}
               </ul>
-              <Button size="lg" onClick={login} className="rounded-full px-10 h-14 font-black bg-slate-900 hover:bg-slate-800 text-white">
+              <Button size="lg" onClick={handleCta} className="rounded-full px-10 h-14 font-black bg-slate-900 hover:bg-slate-800 text-white">
                 Explorer les fonctionnalités <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </div>
@@ -289,7 +316,7 @@ export const LandingPage = () => {
                   <p className="text-lg text-slate-400 font-medium leading-relaxed">
                     Le futur du business est collaboratif. FusionBiz permet aux entreprises de partager des processus en un clic. Un restaurant peut envoyer ses commandes directement sur l'interface de son partenaire livreur.
                   </p>
-                  <Button size="lg" onClick={login} className="rounded-full px-10 h-14 font-black bg-blue-600 hover:bg-blue-700 text-white border-none">
+                  <Button size="lg" onClick={handleCta} className="rounded-full px-10 h-14 font-black bg-blue-600 hover:bg-blue-700 text-white border-none">
                     Ouvrir mon réseau <Zap className="ml-2 w-4 h-4 fill-current" />
                   </Button>
                 </div>
@@ -333,7 +360,7 @@ export const LandingPage = () => {
           </h2>
           <p className="text-xl text-slate-500 font-bold">Pas de carte bancaire requise. Configuration en 2 minutes.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Button size="lg" onClick={login} className="w-full sm:w-auto rounded-full px-12 h-16 text-xl font-black bg-blue-600 hover:bg-blue-700 shadow-2xl shadow-blue-200 text-white">
+            <Button size="lg" onClick={handleCta} className="w-full sm:w-auto rounded-full px-12 h-16 text-xl font-black bg-blue-600 hover:bg-blue-700 shadow-2xl shadow-blue-200 text-white">
               Démarrer l'essai gratuit
             </Button>
             <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-full px-12 h-16 text-xl font-bold border-2 bg-white">

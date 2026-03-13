@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Users, Package, FileText, Plus, Search, MoreHorizontal,
   TrendingUp, ArrowUpRight, Edit, Trash2, Send, Eye,
-  Wallet, Receipt, Landmark, CheckCircle2, AlertCircle, Upload, Filter, Download
+  Wallet, Receipt, Landmark, CheckCircle2, AlertCircle, Upload, Filter, Download,
+  Printer, FileDown, History
 } from 'lucide-react';
 import { blink } from '@/lib/blink';
 import { useAuth } from '@/hooks/useAuth';
@@ -75,6 +76,39 @@ const AccountingTab = () => {
       setOpen(false);
       load();
     } catch { toast.error('Erreur creation'); }
+  };
+
+  const syncBank = async () => {
+    setLoading(true);
+    try {
+      // Simulate real bank sync by creating mock transactions if none exist
+      const mockTrans = [
+        { id: `tr_${Date.now()}_1`, description: 'Paiement Client #001', amount: 1250, category: 'revenue', type: 'incoming' },
+        { id: `tr_${Date.now()}_2`, description: 'Loyer Bureau Mars', amount: -2100, category: 'rent', type: 'outgoing' },
+        { id: `tr_${Date.now()}_3`, description: 'Abonnement FusionBiz', amount: -49, category: 'software', type: 'outgoing' },
+      ];
+      
+      for (const t of mockTrans) {
+        await blink.db.transactions.create({
+          ...t,
+          userId: user!.id,
+          companyId: company!.id,
+          date: new Date().toISOString(),
+          isReconciled: "0"
+        });
+      }
+      toast.success('Synchronisation bancaire réussie (3 nouvelles opérations)');
+      load();
+    } catch { toast.error('Erreur synchro'); }
+    finally { setLoading(false); }
+  };
+
+  const handleReconcile = async (transId: string) => {
+    try {
+      await blink.db.transactions.update(transId, { isReconciled: "1" });
+      toast.success('Transaction rapprochée');
+      load();
+    } catch { }
   };
 
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
@@ -217,9 +251,11 @@ const AccountingTab = () => {
             <Landmark className="w-5 h-5 text-blue-500" />
             <div className="flex-1">
               <p className="text-sm font-bold">Synchronisation Bancaire Active</p>
-              <p className="text-xs text-muted-foreground">Dernière mise à jour : il y a 5 minutes (BNP Paribas)</p>
+              <p className="text-xs text-muted-foreground">Compte Pro (BNP Paribas)</p>
             </div>
-            <Button variant="outline" size="sm" className="rounded-lg text-xs font-bold">Forcer la synchro</Button>
+            <Button variant="outline" size="sm" onClick={syncBank} className="rounded-lg text-xs font-bold bg-white shadow-sm border-slate-200">
+              <History className="w-3.5 h-3.5 mr-1.5" /> Forcer la synchro
+            </Button>
           </div>
           
           <Card className="glass overflow-hidden">
@@ -233,31 +269,39 @@ const AccountingTab = () => {
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-border/50 bg-yellow-500/5">
-                  <td className="p-4 text-sm font-medium">12/03/2026</td>
-                  <td className="p-4">
-                    <p className="font-bold text-sm">VIREMENT CLIENT #1234</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-0.5">Entrant</p>
-                  </td>
-                  <td className="p-4 text-right font-black text-emerald-500">+1,200.00 €</td>
-                  <td className="p-4 text-right">
-                    <Button size="sm" variant="outline" className="rounded-lg h-8 text-xs font-bold text-primary border-primary/20 hover:bg-primary/10">Rapprocher</Button>
-                  </td>
-                </tr>
-                <tr className="border-b border-border/50">
-                  <td className="p-4 text-sm font-medium">10/03/2026</td>
-                  <td className="p-4">
-                    <p className="font-bold text-sm">PRELEVEMENT AWS CLOUD</p>
-                    <p className="text-[10px] text-muted-foreground uppercase font-black tracking-widest mt-0.5">Sortant</p>
-                  </td>
-                  <td className="p-4 text-right font-black">-45.20 €</td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-1.5 text-emerald-500">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="text-[10px] font-black uppercase">Réconcilié</span>
-                    </div>
-                  </td>
-                </tr>
+                {transactions.length === 0 ? (
+                  <tr><td colSpan={4} className="p-12 text-center text-muted-foreground font-medium italic">Aucune transaction bancaire. Cliquez sur "Synchro" pour simuler un flux.</td></tr>
+                ) : (
+                  transactions.map(tr => (
+                    <tr key={tr.id} className={cn("border-b border-border/50 hover:bg-muted/10 transition-colors", tr.isReconciled === "0" && "bg-yellow-500/[0.02]")}>
+                      <td className="p-4 text-xs font-bold text-slate-500">{new Date(tr.date).toLocaleDateString()}</td>
+                      <td className="p-4">
+                        <p className="font-black text-sm uppercase">{tr.description}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mt-0.5">{tr.amount > 0 ? 'Entrant' : 'Sortant'}</p>
+                      </td>
+                      <td className={cn("p-4 text-right font-black text-sm", tr.amount > 0 ? "text-emerald-500" : "text-slate-900")}>
+                        {tr.amount > 0 ? '+' : ''}{Number(tr.amount).toLocaleString('fr-FR')} €
+                      </td>
+                      <td className="p-4 text-right">
+                        {tr.isReconciled === "1" ? (
+                          <div className="flex items-center justify-end gap-1.5 text-emerald-500">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase">Réconcilié</span>
+                          </div>
+                        ) : (
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => handleReconcile(tr.id)}
+                            className="rounded-lg h-8 text-[10px] font-black uppercase text-blue-600 border-blue-100 hover:bg-blue-50"
+                          >
+                            Rapprocher
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </Card>

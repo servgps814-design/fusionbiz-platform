@@ -8,39 +8,84 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Globe, Users, Handshake, Search, Building2, 
   MapPin, Star, Share2, CheckCircle2, MessageSquare,
-  Network, ArrowRight, Zap, Filter
+  Network, ArrowRight, Zap, Filter, Trash2
 } from 'lucide-react';
 import { blink } from '@/lib/blink';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const statusColors = {
+  pending: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+  accepted: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+  rejected: 'bg-red-100 text-red-600 border-red-200',
+};
 
 export const B2BPage = () => {
   const { user } = useAuth();
   const { company } = useCompany();
   const [listings, setListings] = useState<any[]>([]);
   const [connections, setConnections] = useState<any[]>([]);
+  const [myListing, setMyListing] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [isListingOpen, setIsListingOpen] = useState(false);
+  const [listingForm, setListingForm] = useState({ businessType: 'restaurant', description: '', servicesOffered: '' });
 
   const load = async () => {
     if (!user || !company) return;
     setLoading(true);
     try {
-      const [listRes, connRes] = await Promise.all([
+      const [listRes, connRes, myL] = await Promise.all([
         blink.db.publicBusinessListing.list({ limit: 100 }),
         blink.db.companyConnections.list({ 
           where: { OR: [{ requesterId: company.id }, { receiverId: company.id }] } 
-        })
+        }),
+        blink.db.publicBusinessListing.get({ where: { companyId: company.id } })
       ]);
       setListings(listRes);
       setConnections(connRes);
+      setMyListing(myL);
+      if (myL) setListingForm({ businessType: myL.businessType, description: myL.description, servicesOffered: myL.servicesOffered });
     } catch { toast.error('Erreur chargement réseau B2B'); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [user, company]);
+
+  const handleUpdateListing = async () => {
+    try {
+      if (myListing) {
+        await blink.db.publicBusinessListing.update(myListing.id, { ...listingForm });
+      } else {
+        await blink.db.publicBusinessListing.create({
+          id: `list_${Date.now()}`,
+          companyId: company!.id,
+          ...listingForm,
+          isPublic: "1"
+        });
+      }
+      toast.success('Profil B2B mis à jour');
+      setIsListingOpen(false);
+      load();
+    } catch { toast.error('Erreur'); }
+  };
 
   const handleConnect = async (targetCompanyId: string) => {
     if (targetCompanyId === company?.id) return;
@@ -57,6 +102,22 @@ export const B2BPage = () => {
     } catch { toast.error('Erreur lors de la demande'); }
   };
 
+  const handleAccept = async (connId: string) => {
+    try {
+      await blink.db.companyConnections.update(connId, { status: 'accepted' });
+      toast.success('Connexion acceptée ! Vos flux sont désormais synchronisés.');
+      load();
+    } catch { toast.error('Erreur lors de l\'acceptation'); }
+  };
+
+  const handleReject = async (connId: string) => {
+    try {
+      await blink.db.companyConnections.delete(connId);
+      toast.success('Demande refusée');
+      load();
+    } catch { toast.error('Erreur lors du refus'); }
+  };
+
   const filteredListings = listings.filter(l => 
     l.companyId !== company?.id &&
     (l.businessType?.toLowerCase().includes(search.toLowerCase()) || 
@@ -71,10 +132,44 @@ export const B2BPage = () => {
           <p className="text-muted-foreground font-medium italic">Interconnectez votre entreprise avec l'écosystème local.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="rounded-xl font-bold"><Share2 className="w-4 h-4 mr-2" /> Partager mon profil</Button>
+          <Button variant="outline" className="rounded-xl font-bold" onClick={() => setIsListingOpen(true)}><Share2 className="w-4 h-4 mr-2" /> {myListing ? 'Modifier mon profil' : 'Publier mon profil'}</Button>
           <Button className="rounded-xl font-bold bg-primary shadow-lg shadow-primary/20"><Network className="w-4 h-4 mr-2" /> Gérer mes flux</Button>
         </div>
       </div>
+
+      <Dialog open={isListingOpen} onOpenChange={setIsListingOpen}>
+        <DialogContent className="glass">
+          <DialogHeader>
+            <DialogTitle className="font-black uppercase tracking-tighter">Mon Profil Public B2B</DialogTitle>
+            <DialogDescription>Rendez votre entreprise visible pour attirer des partenaires.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="font-bold">Type d'activité</Label>
+              <Select value={listingForm.businessType} onValueChange={v => setListingForm({...listingForm, businessType: v})}>
+                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="restaurant">Restaurant / Métiers de bouche</SelectItem>
+                  <SelectItem value="delivery_agency">Agence de Livraison</SelectItem>
+                  <SelectItem value="supplier">Fournisseur / Grossiste</SelectItem>
+                  <SelectItem value="software">Logiciels / Services Numériques</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold">Description de l'entreprise</Label>
+              <Input value={listingForm.description} onChange={e => setListingForm({...listingForm, description: e.target.value})} placeholder="Présentez votre métier..." className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label className="font-bold">Services proposés (séparés par virgules)</Label>
+              <Input value={listingForm.servicesOffered} onChange={e => setListingForm({...listingForm, servicesOffered: e.target.value})} placeholder="Ex: Livraison express, Plats du jour..." className="rounded-xl" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdateListing} className="w-full rounded-xl font-bold">Enregistrer le profil</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="explore" className="w-full">
         <TabsList className="bg-muted/50 p-1 rounded-2xl h-auto mb-8">
@@ -182,7 +277,7 @@ export const B2BPage = () => {
                     <div>
                       <p className="font-black text-sm">Partenaire #{conn.receiverId === company?.id ? conn.requesterId.slice(0, 8) : conn.receiverId.slice(0, 8)}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <Badge className={cn("text-[10px] font-bold border uppercase", conn.status === 'accepted' ? statusColors.active : statusColors.pending)}>
+                        <Badge className={cn("text-[10px] font-bold border uppercase", statusColors[conn.status])}>
                           {conn.status}
                         </Badge>
                         <span className="text-[10px] text-muted-foreground font-bold">FLUX : DELIVERY, ERP</span>
@@ -192,9 +287,28 @@ export const B2BPage = () => {
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="rounded-lg font-bold"><MessageSquare className="w-4 h-4 mr-2" /> Chat</Button>
                     {conn.status === 'pending' && conn.receiverId === company?.id && (
-                      <Button size="sm" className="rounded-lg font-bold bg-emerald-500 hover:bg-emerald-600">Accepter</Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          className="rounded-lg font-bold bg-emerald-500 hover:bg-emerald-600"
+                          onClick={() => handleAccept(conn.id)}
+                        >
+                          Accepter
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          className="rounded-lg font-bold text-red-500"
+                          onClick={() => handleReject(conn.id)}
+                        >
+                          Refuser
+                        </Button>
+                      </div>
                     )}
-                    <Button variant="ghost" size="icon" className="rounded-lg text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                    {conn.status === 'accepted' && (
+                       <Badge className="bg-emerald-100 text-emerald-600 border-emerald-200">Connecté</Badge>
+                    )}
+                    <Button variant="ghost" size="icon" className="rounded-lg text-destructive" onClick={() => handleReject(conn.id)}><Trash2 className="w-4 h-4" /></Button>
                   </div>
                 </Card>
               ))

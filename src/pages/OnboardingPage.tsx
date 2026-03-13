@@ -56,6 +56,15 @@ export const OnboardingPage = () => {
         role: 'admin',
       });
 
+      // Create public business listing automatically
+      await blink.db.publicBusinessListing.create({
+        id: `pub_${companyId}`,
+        companyId: companyId,
+        businessType: formData.legalStatus || 'SME',
+        description: `Entreprise ${formData.companyName} spécialisée dans son secteur.`,
+        isPublic: "1"
+      });
+
       await refreshCompany();
       toast.success('Dossier envoyé avec succès ! Notre équipe va valider vos documents.');
       navigate('/dashboard');

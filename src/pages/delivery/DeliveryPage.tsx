@@ -27,23 +27,30 @@ export const DeliveryPage = () => {
   const { user } = useAuth();
   const { company } = useCompany();
   const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [partners, setPartners] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
-    clientName: '', clientAddress: '', driverName: '', amount: '', notes: '', items: ''
+    clientName: '', clientAddress: '', partnerId: '', amount: '', notes: '', items: ''
   });
 
   const load = async () => {
     if (!user || !company) return;
     setLoading(true);
     try {
-      const res = await blink.db.deliveries.list({
-        where: { userId: user.id, companyId: company.id },
-        orderBy: { createdAt: 'desc' }, limit: 100
-      });
+      const [res, connRes] = await Promise.all([
+        blink.db.deliveries.list({
+          where: { companyId: company.id },
+          orderBy: { createdAt: 'desc' }, limit: 100
+        }),
+        blink.db.companyConnections.list({
+          where: { AND: [{ requesterId: company.id }, { status: 'accepted' }] }
+        })
+      ]);
       setDeliveries(res);
+      setPartners(connRes);
     } catch { } finally { setLoading(false); }
   };
 
@@ -61,12 +68,12 @@ export const DeliveryPage = () => {
         id: `del_${Date.now()}`, userId: user!.id, companyId: company!.id,
         orderNumber: `CMD-${String(orderNum).padStart(4, '0')}`,
         clientName: form.clientName, clientAddress: form.clientAddress,
-        driverName: form.driverName, amount: parseFloat(form.amount) || 0,
+        driverName: form.partnerId || 'Interne', amount: parseFloat(form.amount) || 0,
         notes: form.notes, items: form.items, status: 'pending'
       });
-      toast.success('Commande créée');
+      toast.success('Commande créée et assignée');
       setOpen(false);
-      setForm({ clientName: '', clientAddress: '', driverName: '', amount: '', notes: '', items: '' });
+      setForm({ clientName: '', clientAddress: '', partnerId: '', amount: '', notes: '', items: '' });
       load();
     } catch { toast.error('Erreur'); } finally { setSaving(false); }
   };
@@ -106,7 +113,18 @@ export const DeliveryPage = () => {
               <div className="space-y-1"><Label className="font-bold">Nom du client *</Label><Input placeholder="Prénom Nom" value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} className="rounded-xl" /></div>
               <div className="space-y-1"><Label className="font-bold">Adresse de livraison *</Label><Input placeholder="Adresse complète" value={form.clientAddress} onChange={e => setForm({ ...form, clientAddress: e.target.value })} className="rounded-xl" /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1"><Label className="font-bold">Livreur</Label><Input placeholder="Nom du livreur" value={form.driverName} onChange={e => setForm({ ...form, driverName: e.target.value })} className="rounded-xl" /></div>
+                <div className="space-y-1">
+                  <Label className="font-bold">Assigner à un partenaire B2B</Label>
+                  <Select value={form.partnerId} onValueChange={v => setForm({...form, partnerId: v})}>
+                    <SelectTrigger className="rounded-xl"><SelectValue placeholder="Flotte Interne" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Flotte Interne</SelectItem>
+                      {partners.map(p => (
+                        <SelectItem key={p.id} value={p.receiverId}>Partenaire #{p.receiverId.slice(0, 8)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-1"><Label className="font-bold">Montant (€)</Label><Input type="number" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="rounded-xl" /></div>
               </div>
               <div className="space-y-1"><Label className="font-bold">Articles</Label><Input placeholder="Ex: 1x Pizza Margherita, 2x Coca" value={form.items} onChange={e => setForm({ ...form, items: e.target.value })} className="rounded-xl" /></div>
