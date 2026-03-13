@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { 
   TrendingUp, Users, Package, DollarSign, Activity,
   ArrowUpRight, ArrowDownRight, FileText, Truck,
-  Target, Workflow, ArrowRight, Zap, Clock
+  Target, Workflow, ArrowRight, Zap, Clock,
+  ChevronRight, Calendar, AlertCircle, CheckCircle2,
+  Receipt, Wallet, Landmark
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
@@ -14,30 +16,33 @@ import { useCompany } from '@/hooks/useCompany';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
-const StatCard = ({ title, value, change, trend, icon: Icon, loading }: any) => (
-  <Card className="glass overflow-hidden group">
+const StatCard = ({ title, value, subValue, trend, icon: Icon, loading, color }: any) => (
+  <Card className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
+    <div className={cn("absolute top-0 left-0 w-1 h-full", color || "bg-blue-600")} />
     <CardContent className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110", 
+          color ? `bg-${color.split('-')[1]}-50 text-${color.split('-')[1]}-600` : "bg-blue-50 text-blue-600")}>
           <Icon className="w-5 h-5" />
         </div>
-        {change !== undefined && (
+        {trend && (
           <div className={cn(
-            "flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full",
-            trend === 'up' ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+            "flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full",
+            trend > 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
           )}>
-            {trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-            {change}
+            {trend > 0 ? <TrendingUp className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+            {Math.abs(trend)}%
           </div>
         )}
       </div>
       <div>
-        <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">{title}</p>
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
         {loading ? (
-          <div className="h-8 w-24 bg-muted animate-pulse rounded-lg" />
+          <div className="h-8 w-24 bg-slate-100 dark:bg-slate-800 animate-pulse rounded-lg" />
         ) : (
-          <h3 className="text-3xl font-black tracking-tighter">{value}</h3>
+          <h3 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white">{value}</h3>
         )}
+        {subValue && <p className="text-xs font-bold text-slate-400 mt-1">{subValue}</p>}
       </div>
     </CardContent>
   </Card>
@@ -46,229 +51,285 @@ const StatCard = ({ title, value, change, trend, icon: Icon, loading }: any) => 
 export const Dashboard = () => {
   const { user } = useAuth();
   const { company } = useCompany();
-  const [stats, setStats] = useState({ clients: 0, products: 0, invoices: 0, deliveries: 0, totalRevenue: 0, workflows: 0 });
+  const [stats, setStats] = useState({ clients: 0, products: 0, invoices: 0, deliveries: 0, totalRevenue: 0, expenses: 0 });
   const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
-  const [recentDeliveries, setRecentDeliveries] = useState<any[]>([]);
+  const [pendingTasks, setPendingTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const chartData = [
-    { name: 'Lun', value: Math.floor(Math.random() * 3000) + 1000 },
-    { name: 'Mar', value: Math.floor(Math.random() * 3000) + 1500 },
-    { name: 'Mer', value: Math.floor(Math.random() * 3000) + 1200 },
-    { name: 'Jeu', value: Math.floor(Math.random() * 3000) + 2000 },
-    { name: 'Ven', value: Math.floor(Math.random() * 3000) + 1800 },
-    { name: 'Sam', value: Math.floor(Math.random() * 3000) + 800 },
-    { name: 'Dim', value: Math.floor(Math.random() * 3000) + 600 },
-  ];
 
   useEffect(() => {
     if (!user || !company) return;
     const load = async () => {
       setLoading(true);
       try {
-        const [clients, products, invoices, deliveries, workflows] = await Promise.all([
-          blink.db.clients.count({ where: { userId: user.id, companyId: company.id } }),
-          blink.db.products.count({ where: { userId: user.id, companyId: company.id } }),
-          blink.db.invoices.list({ where: { userId: user.id, companyId: company.id }, limit: 5, orderBy: { createdAt: 'desc' } }),
-          blink.db.deliveries.list({ where: { userId: user.id, companyId: company.id }, limit: 5, orderBy: { createdAt: 'desc' } }),
-          blink.db.workflows.count({ where: { userId: user.id, companyId: company.id } }),
+        const [clients, allInvoices, expenses, deliveries] = await Promise.all([
+          blink.db.clients.count({ where: { companyId: company.id } }),
+          blink.db.invoices.list({ where: { companyId: company.id }, limit: 1000 }),
+          blink.db.expenses.list({ where: { companyId: company.id } }),
+          blink.db.deliveries.list({ where: { companyId: company.id }, limit: 5, orderBy: { createdAt: 'desc' } })
         ]);
 
-        const allInvoices = await blink.db.invoices.list({ where: { userId: user.id, companyId: company.id }, limit: 1000 });
         const totalRevenue = allInvoices.filter((i: any) => i.status === 'paid').reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
+        const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
 
         setStats({
-          clients, products,
+          clients, products: 0,
           invoices: allInvoices.length,
-          deliveries: await blink.db.deliveries.count({ where: { userId: user.id, companyId: company.id } }),
-          totalRevenue, workflows
+          deliveries: deliveries.length,
+          totalRevenue,
+          expenses: totalExpenses
         });
-        setRecentInvoices(invoices);
-        setRecentDeliveries(deliveries);
+        setRecentInvoices(allInvoices.slice(0, 5));
+        
+        // Mock pending tasks for UI polish
+        setPendingTasks([
+          { id: 1, type: 'tax', label: 'Déclaration TVA Trimestre 1', due: 'Dans 4 jours', priority: 'high' },
+          { id: 2, type: 'invoice', label: '3 factures en retard de paiement', due: 'Urgent', priority: 'high' },
+          { id: 3, type: 'kyc', label: 'Validation dossier KBIS', due: 'En cours', priority: 'medium' },
+        ]);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     };
     load();
   }, [user, company]);
 
-  const modules = [
-    { href: '/dashboard/erp', icon: Package, label: 'ERP', desc: 'Clients & Factures', color: 'text-blue-500 bg-blue-500/10' },
-    { href: '/dashboard/automation', icon: Workflow, label: 'Automatisation', desc: 'Workflows actifs', color: 'text-purple-500 bg-purple-500/10' },
-    { href: '/dashboard/marketing', icon: Target, label: 'Marketing', desc: 'Campagnes IA', color: 'text-pink-500 bg-pink-500/10' },
-    { href: '/dashboard/delivery', icon: Truck, label: 'Livraison', desc: 'Suivi commandes', color: 'text-emerald-500 bg-emerald-500/10' },
+  const chartData = [
+    { name: 'Jan', revenue: 4000, expenses: 2400 },
+    { name: 'Fév', revenue: 3000, expenses: 1398 },
+    { name: 'Mar', revenue: 2000, expenses: 9800 },
+    { name: 'Avr', revenue: 2780, expenses: 3908 },
+    { name: 'Mai', revenue: 1890, expenses: 4800 },
+    { name: 'Juin', revenue: 2390, expenses: 3800 },
   ];
 
-  const deliveryStatusColor: Record<string, string> = {
-    pending: 'bg-yellow-500/10 text-yellow-600',
-    preparing: 'bg-blue-500/10 text-blue-600',
-    out_for_delivery: 'bg-purple-500/10 text-purple-600',
-    delivered: 'bg-emerald-500/10 text-emerald-600',
-  };
-  const deliveryStatusLabel: Record<string, string> = {
-    pending: 'En attente', preparing: 'En préparation',
-    out_for_delivery: 'En livraison', delivered: 'Livré',
-  };
-  const invoiceStatusLabel: Record<string, string> = { draft: 'Brouillon', sent: 'Envoyée', paid: 'Payée', overdue: 'En retard' };
-  const invoiceStatusColor: Record<string, string> = {
-    draft: 'bg-yellow-500/10 text-yellow-600', sent: 'bg-blue-500/10 text-blue-600',
-    paid: 'bg-emerald-500/10 text-emerald-600', overdue: 'bg-red-500/10 text-red-600',
-  };
-
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-10 animate-fade-in max-w-6xl mx-auto pb-20">
+      {/* Header with Welcome Message */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h1 className="text-4xl font-black tracking-tighter uppercase mb-2">Centre de Commande</h1>
-          <p className="text-muted-foreground font-medium">
-            Bienvenue, <span className="text-foreground font-bold">{user?.displayName || user?.email?.split('@')[0]}</span>. Voici l'état actuel de <span className="text-foreground font-bold">{company?.name}</span>.
-          </p>
+          <h1 className="text-4xl font-black tracking-tighter text-slate-900 dark:text-white mb-2">
+            Bonjour, {user?.displayName || "l'ami"} 👋
+          </h1>
+          <div className="flex items-center gap-3 text-slate-500 font-bold text-sm">
+            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+            <div className="w-1 h-1 rounded-full bg-slate-300" />
+            <span className="flex items-center gap-1.5 text-blue-600 uppercase tracking-widest text-[10px]"><CheckCircle2 className="w-3.5 h-3.5" /> Société : {company?.name}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="rounded-xl font-bold h-12 px-6 border-slate-200">
+            <Download className="w-4 h-4 mr-2" /> Rapports
+          </Button>
+          <Button className="rounded-xl font-black h-12 px-8 bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-100 text-white">
+            <Plus className="w-4 h-4 mr-2" /> Action Rapide
+          </Button>
         </div>
       </div>
 
-      {/* Quick Module Access */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {modules.map(mod => (
-          <Link key={mod.href} to={mod.href}>
-            <Card className="glass hover:shadow-lg transition-all cursor-pointer group">
-              <CardContent className="p-5">
-                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform", mod.color)}>
-                  <mod.icon className="w-5 h-5" />
-                </div>
-                <p className="font-black text-sm">{mod.label}</p>
-                <p className="text-xs text-muted-foreground">{mod.desc}</p>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
-
-      {/* Stats */}
+      {/* Main Stats Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Chiffre d'Affaires Encaissé" value={`${stats.totalRevenue.toLocaleString('fr-FR')} €`} icon={DollarSign} loading={loading} />
-        <StatCard title="Clients" value={stats.clients} icon={Users} loading={loading} />
-        <StatCard title="Factures & Devis" value={stats.invoices} icon={FileText} loading={loading} />
-        <StatCard title="Livraisons" value={stats.deliveries} icon={Truck} loading={loading} />
+        <StatCard 
+          title="Chiffre d'Affaires" 
+          value={`${stats.totalRevenue.toLocaleString('fr-FR')} €`} 
+          subValue="Encaissé ce mois"
+          trend={12.5}
+          icon={Wallet} 
+          loading={loading}
+          color="bg-blue-600"
+        />
+        <StatCard 
+          title="Dépenses" 
+          value={`${stats.expenses.toLocaleString('fr-FR')} €`} 
+          subValue="Sorties ce mois"
+          trend={-4.2}
+          icon={Receipt} 
+          loading={loading}
+          color="bg-purple-600"
+        />
+        <StatCard 
+          title="Résultat Net" 
+          value={`${(stats.totalRevenue - stats.expenses).toLocaleString('fr-FR')} €`} 
+          subValue="Avant impôts"
+          icon={Landmark} 
+          loading={loading}
+          color="bg-emerald-600"
+        />
+        <StatCard 
+          title="Clients Actifs" 
+          value={stats.clients} 
+          subValue="+3 cette semaine"
+          trend={8.1}
+          icon={Users} 
+          loading={loading}
+          color="bg-orange-600"
+        />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Chart */}
-        <Card className="lg:col-span-2 glass">
-          <CardHeader>
-            <CardTitle className="text-xl font-black tracking-tighter uppercase flex items-center justify-between">
-              Activité de la Semaine
-              <Badge variant="secondary" className="text-xs font-bold">En direct</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[280px] w-full mt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fontWeight: 500, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={v => `${v}€`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }} />
-                  <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Stats */}
-        <div className="space-y-4">
-          <Card className="glass">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary"><Zap className="w-4 h-4" /></div>
-                <h3 className="font-black tracking-tight text-sm uppercase">Vue d'ensemble</h3>
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Main Chart Section */}
+        <div className="lg:col-span-2 space-y-8">
+          <Card className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-8">
+              <div>
+                <CardTitle className="text-xl font-black tracking-tighter uppercase text-slate-900 dark:text-white">Santé Financière</CardTitle>
+                <CardDescription className="font-bold">Evolution du CA vs Dépenses</CardDescription>
               </div>
-              <div className="space-y-3">
-                {[
-                  { label: 'Produits/Services', value: loading ? '...' : stats.products },
-                  { label: 'Workflows', value: loading ? '...' : stats.workflows },
-                  { label: 'Modules actifs', value: '4' },
-                ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
-                    <span className="text-sm text-muted-foreground">{item.label}</span>
-                    <span className="font-black text-sm">{item.value}</span>
-                  </div>
-                ))}
+              <Select defaultValue="6m">
+                <SelectTrigger className="w-32 rounded-xl h-9 font-bold text-xs">
+                  <SelectValue placeholder="Période" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1m">1 mois</SelectItem>
+                  <SelectItem value="3m">3 mois</SelectItem>
+                  <SelectItem value="6m">6 mois</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="rgb(37, 99, 235)" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="rgb(37, 99, 235)" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="rgb(147, 51, 234)" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="rgb(147, 51, 234)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 12, fontWeight: 700, fill: '#94a3b8' }} 
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94a3b8' }}
+                      tickFormatter={v => `${v}€`}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#fff', 
+                        borderColor: '#f1f5f9', 
+                        borderRadius: '16px', 
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                        fontSize: '12px', 
+                        fontWeight: '800' 
+                      }} 
+                    />
+                    <Area type="monotone" dataKey="revenue" stroke="rgb(37, 99, 235)" strokeWidth={4} fillOpacity={1} fill="url(#colorRevenue)" />
+                    <Area type="monotone" dataKey="expenses" stroke="rgb(147, 51, 234)" strokeWidth={4} fillOpacity={1} fill="url(#colorExpenses)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-6 mt-6 justify-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-600" />
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-500">Chiffre d'Affaires</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-purple-600" />
+                  <span className="text-xs font-black uppercase tracking-widest text-slate-500">Dépenses</span>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="glass">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <h3 className="font-black text-sm uppercase tracking-tight">Dernières Factures</h3>
+          {/* Module Grid Section */}
+          <div className="grid grid-cols-2 gap-4">
+             <Card className="bg-blue-600 text-white border-none shadow-xl shadow-blue-100 p-6 flex flex-col justify-between h-48 group cursor-pointer overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                <Bot className="w-10 h-10 mb-4 opacity-80" />
+                <div>
+                  <p className="text-sm font-black uppercase tracking-widest opacity-70">IA Assistant</p>
+                  <h4 className="text-xl font-black tracking-tight">Besoin d'aide ?</h4>
+                  <p className="text-xs font-bold mt-1 opacity-80 flex items-center group-hover:translate-x-1 transition-transform">Demandez à l'IA <ChevronRight className="w-3 h-3 ml-1" /></p>
                 </div>
-                <Link to="/dashboard/erp"><Button variant="ghost" size="sm" className="h-7 rounded-lg text-xs"><ArrowRight className="w-3 h-3" /></Button></Link>
+             </Card>
+             <Card className="bg-slate-900 text-white border-none shadow-xl shadow-slate-200 p-6 flex flex-col justify-between h-48 group cursor-pointer overflow-hidden relative">
+                <Network className="w-10 h-10 mb-4 opacity-80 text-blue-500" />
+                <div>
+                  <p className="text-sm font-black uppercase tracking-widest opacity-70">Réseau B2B</p>
+                  <h4 className="text-xl font-black tracking-tight">Interconnecté</h4>
+                  <p className="text-xs font-bold mt-1 opacity-80 flex items-center group-hover:translate-x-1 transition-transform">Explorer les partenaires <ChevronRight className="w-3 h-3 ml-1" /></p>
+                </div>
+             </Card>
+          </div>
+        </div>
+
+        {/* Sidebar Tasks & Recent Activity */}
+        <div className="space-y-8">
+          <Card className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+            <CardHeader>
+              <div className="flex items-center justify-between mb-2">
+                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">À Faire (Indy Style)</CardTitle>
+                <Badge className="bg-blue-50 text-blue-600 border-none font-black text-[10px]">{pendingTasks.length}</Badge>
               </div>
-              {recentInvoices.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">Aucune facture — <Link to="/dashboard/erp" className="text-primary font-bold hover:underline">Créer</Link></p>
-              ) : (
-                <div className="space-y-2">
-                  {recentInvoices.slice(0, 4).map(inv => (
-                    <div key={inv.id} className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold truncate">{inv.clientName}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{inv.number}</p>
+              <CardDescription className="text-xs font-bold">Actions recommandées pour votre gestion.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pendingTasks.map(task => (
+                <div key={task.id} className="group p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 hover:border-blue-200 hover:bg-white transition-all cursor-pointer">
+                  <div className="flex items-start gap-3">
+                    <div className={cn("w-2 h-2 rounded-full mt-1.5", 
+                      task.priority === 'high' ? "bg-red-500 animate-pulse" : "bg-blue-500") 
+                    } />
+                    <div className="flex-1">
+                      <p className="text-sm font-black text-slate-800 dark:text-slate-200 leading-tight mb-1">{task.label}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{task.due}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-600 transition-colors" />
+                  </div>
+                </div>
+              ))}
+              <Button variant="ghost" className="w-full text-blue-600 font-black text-xs uppercase tracking-widest hover:bg-blue-50 py-6 h-auto">
+                Voir toutes les tâches
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+            <CardHeader>
+              <CardTitle className="text-sm font-black uppercase tracking-widest">Derniers Flux</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {recentInvoices.slice(0, 4).map(inv => (
+                  <div key={inv.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <Receipt className="w-4 h-4 text-slate-500" />
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                        <Badge className={cn('text-[10px] font-bold border px-1.5 py-0', invoiceStatusColor[inv.status] || '')}>{invoiceStatusLabel[inv.status] || inv.status}</Badge>
-                        <span className="text-xs font-black">{Number(inv.amount || 0).toFixed(0)}€</span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-slate-900 dark:text-white truncate">{inv.clientName}</p>
+                        <p className="text-[10px] font-bold text-slate-400">Facture #{inv.number}</p>
                       </div>
                     </div>
-                  ))}
+                    <div className="text-right">
+                      <p className="text-xs font-black text-slate-900 dark:text-white">{Number(inv.amount).toFixed(0)} €</p>
+                      <p className={cn("text-[9px] font-black uppercase tracking-widest", 
+                        inv.status === 'paid' ? "text-emerald-500" : "text-yellow-500")}>
+                        {inv.status}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {recentInvoices.length === 0 && (
+                <div className="p-8 text-center text-slate-400">
+                  <p className="text-xs font-bold italic">Aucune activité récente.</p>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Recent Deliveries */}
-      {(recentDeliveries.length > 0 || !loading) && (
-        <Card className="glass">
-          <CardHeader>
-            <CardTitle className="text-xl font-black tracking-tighter uppercase flex items-center justify-between">
-              Livraisons Récentes
-              <Link to="/dashboard/delivery">
-                <Button variant="ghost" size="sm" className="rounded-xl font-bold">Voir tout <ArrowRight className="w-4 h-4 ml-1" /></Button>
-              </Link>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentDeliveries.length === 0 ? (
-              <div className="text-center py-8">
-                <Truck className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Aucune livraison — <Link to="/dashboard/delivery" className="text-primary font-bold hover:underline">Créer une commande</Link></p>
-              </div>
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {recentDeliveries.map(d => (
-                  <div key={d.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/50">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black text-xs">{d.clientName?.charAt(0)}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold truncate">{d.clientName}</p>
-                      <p className="text-xs font-mono text-muted-foreground">{d.orderNumber}</p>
-                    </div>
-                    <Badge className={cn('text-[10px] font-bold border px-1.5', deliveryStatusColor[d.status] || '')}>{deliveryStatusLabel[d.status] || d.status}</Badge>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
+
+import { Download, Network } from 'lucide-react';

@@ -11,6 +11,7 @@ import { MarketingPage } from './pages/marketing/MarketingPage';
 import { AutomationPage } from './pages/automation/AutomationPage';
 import { DeliveryPage } from './pages/delivery/DeliveryPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
+import { B2BPage } from './pages/b2b/B2BPage';
 import { useCompany } from './hooks/useCompany';
 import { Spinner } from './components/ui/spinner';
 
@@ -58,6 +59,7 @@ function App() {
           <Route path="/dashboard/marketing" element={<DashboardLayout><MarketingPage /></DashboardLayout>} />
           <Route path="/dashboard/delivery" element={<DashboardLayout><DeliveryPage /></DashboardLayout>} />
           <Route path="/dashboard/team" element={<DashboardLayout><TeamPage /></DashboardLayout>} />
+          <Route path="/dashboard/b2b" element={<DashboardLayout><B2BPage /></DashboardLayout>} />
           <Route path="/dashboard/settings" element={<DashboardLayout><SettingsPage /></DashboardLayout>} />
 
           <Route path="*" element={<Navigate to="/" />} />

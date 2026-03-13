@@ -15,7 +15,10 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Plus
+  Plus,
+  Network,
+  CreditCard,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -31,26 +34,22 @@ import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Assistant } from '../ai/Assistant';
 
-const NavItem = ({ icon: Icon, label, href, active, collapsed }: { 
-  icon: any, 
-  label: string, 
-  href: string, 
-  active?: boolean,
-  collapsed?: boolean
-}) => (
+const NavItem = ({ icon: Icon, label, href, active, collapsed }: any) => (
   <Link 
     to={href}
     className={cn(
-      "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
+      "flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group relative",
       active 
-        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
-        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        ? "bg-blue-600 text-white shadow-xl shadow-blue-100" 
+        : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
     )}
   >
-    <Icon className={cn("w-5 h-5 flex-shrink-0", active ? "text-primary-foreground" : "group-hover:text-primary")} />
-    {!collapsed && <span className="text-sm font-semibold tracking-tight">{label}</span>}
+    <Icon className={cn("w-5 h-5 flex-shrink-0 transition-transform group-hover:scale-110", 
+      active ? "text-white" : "group-hover:text-blue-600")} 
+    />
+    {!collapsed && <span className="text-sm font-bold tracking-tight">{label}</span>}
     {collapsed && (
-      <div className="absolute left-full ml-4 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
+      <div className="absolute left-full ml-4 px-3 py-1.5 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 shadow-xl">
         {label}
       </div>
     )}
@@ -65,80 +64,90 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Tableau de bord', href: '/dashboard' },
-    { icon: Building2, label: 'ERP Entreprise', href: '/dashboard/erp' },
+    { icon: Building2, label: 'Gestion & ERP', href: '/dashboard/erp' },
     { icon: Workflow, label: 'Automatisations', href: '/dashboard/automation' },
     { icon: Target, label: 'Marketing IA', href: '/dashboard/marketing' },
-    { icon: Truck, label: 'Logistique & Livraison', href: '/dashboard/delivery' },
-    { icon: Users, label: 'Equipe & Rôles', href: '/dashboard/team' },
-    { icon: Settings, label: 'Paramètres', href: '/dashboard/settings' },
+    { icon: Truck, label: 'Logistique', href: '/dashboard/delivery' },
+    { icon: Network, label: 'Réseau B2B', href: '/dashboard/b2b' },
   ];
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden selection:bg-primary/30">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans selection:bg-blue-100">
       {/* Sidebar */}
       <aside 
         className={cn(
-          "flex flex-col border-r border-border transition-all duration-300 ease-in-out relative z-40 bg-background/50 backdrop-blur-xl",
+          "flex flex-col border-r border-slate-100 dark:border-slate-800 transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] relative z-40 bg-white dark:bg-slate-900",
           collapsed ? "w-20" : "w-72"
         )}
       >
         {/* Logo Section */}
-        <div className="h-20 flex items-center px-6 border-b border-border/50">
+        <div className="h-20 flex items-center px-6 border-b border-slate-50 dark:border-slate-800/50">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-              <Bot className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-100">
+              <Layers className="w-6 h-6 text-white" />
             </div>
             {!collapsed && (
-              <span className="text-xl font-black tracking-tighter">FUSION<span className="text-primary">BIZ</span></span>
+              <span className="text-xl font-black tracking-tighter text-slate-900 dark:text-white">FUSION<span className="text-blue-600 uppercase">BIZ</span></span>
             )}
           </div>
         </div>
 
         {/* Navigation */}
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto py-8 px-4 space-y-1.5 custom-scrollbar">
+          <p className={cn("text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 px-4", collapsed && "text-center px-0")}>
+            {collapsed ? "•••" : "Menu Principal"}
+          </p>
           {navItems.map((item) => (
             <NavItem 
               key={item.href}
               {...item}
-              active={location.pathname === item.href}
+              active={location.pathname.startsWith(item.href)}
               collapsed={collapsed}
             />
           ))}
+          
+          <div className="pt-8">
+            <p className={cn("text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 px-4", collapsed && "text-center px-0")}>
+              {collapsed ? "•••" : "Système"}
+            </p>
+            <NavItem icon={Users} label="Equipe" href="/dashboard/team" active={location.pathname === '/dashboard/team'} collapsed={collapsed} />
+            <NavItem icon={Settings} label="Paramètres" href="/dashboard/settings" active={location.pathname === '/dashboard/settings'} collapsed={collapsed} />
+          </div>
         </div>
 
         {/* User Section */}
-        <div className="p-4 border-t border-border/50">
+        <div className="p-4 border-t border-slate-50 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-800/20">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className={cn(
-                "flex items-center gap-3 w-full p-2 rounded-xl hover:bg-muted transition-colors text-left",
+                "flex items-center gap-3 w-full p-2.5 rounded-2xl hover:bg-white dark:hover:bg-slate-800 transition-all duration-300 shadow-sm border border-transparent hover:border-slate-100",
                 collapsed && "justify-center"
               )}>
-                <Avatar className="w-10 h-10 border-2 border-primary/20">
+                <Avatar className="w-10 h-10 border-2 border-white shadow-sm">
                   <AvatarImage src={user?.metadata?.avatar} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                  <AvatarFallback className="bg-blue-600 text-white font-black">
                     {user?.email?.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 {!collapsed && (
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold truncate leading-none mb-1">{user?.displayName || 'Utilisateur'}</p>
-                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-black truncate text-slate-900 dark:text-white leading-tight">{user?.displayName || 'Utilisateur'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold truncate uppercase tracking-widest mt-0.5">Administrateur</p>
                   </div>
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 glass">
-              <DropdownMenuLabel>Mon Compte</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="py-3">
-                <Settings className="mr-2 h-4 w-4" /> Profil & Sécurité
+            <DropdownMenuContent align="end" side={collapsed ? "right" : "top"} className="w-64 p-2 rounded-2xl shadow-2xl border-slate-100">
+              <DropdownMenuLabel className="font-black text-xs uppercase tracking-widest text-slate-400 p-3">Mon Compte</DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-slate-50" />
+              <DropdownMenuItem className="rounded-xl py-3 cursor-pointer">
+                <CreditCard className="mr-2 h-4 w-4 text-slate-400" /> Facturation
               </DropdownMenuItem>
-              <DropdownMenuItem className="py-3">
-                <Building2 className="mr-2 h-4 w-4" /> Ma Société
+              <DropdownMenuItem className="rounded-xl py-3 cursor-pointer">
+                <MessageSquare className="mr-2 h-4 w-4 text-slate-400" /> Support Premium
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={logout} className="text-destructive py-3">
+              <DropdownMenuSeparator className="bg-slate-50" />
+              <DropdownMenuItem onClick={logout} className="text-red-500 rounded-xl py-3 cursor-pointer hover:bg-red-50 focus:bg-red-50">
                 <LogOut className="mr-2 h-4 w-4" /> Déconnexion
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -148,7 +157,7 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
         {/* Toggle Button */}
         <button 
           onClick={() => setCollapsed(!collapsed)}
-          className="absolute -right-3 top-24 w-6 h-6 rounded-full bg-background border border-border flex items-center justify-center hover:bg-primary hover:text-white transition-all shadow-md z-50"
+          className="absolute -right-3 top-24 w-6 h-6 rounded-full bg-white border border-slate-100 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-xl z-50 text-slate-400"
         >
           {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
         </button>
@@ -157,31 +166,32 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Header */}
-        <header className="h-20 border-b border-border/50 flex items-center justify-between px-8 bg-background/50 backdrop-blur-xl z-30">
-          <div className="flex items-center gap-4 flex-1 max-w-xl">
+        <header className="h-20 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between px-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl z-30">
+          <div className="flex items-center gap-6 flex-1 max-w-2xl">
             <div className="relative w-full group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-300 group-focus-within:text-blue-600 transition-colors" />
               <input 
                 type="text" 
-                placeholder="Rechercher une commande, un client, un workflow..." 
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-muted/50 border border-transparent focus:border-primary focus:bg-background transition-all outline-none text-sm font-medium"
+                placeholder="Recherche globale (clients, factures, workflows...)" 
+                className="w-full pl-12 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:bg-white focus:ring-2 focus:ring-blue-600/5 focus:border-blue-600/20 transition-all outline-none text-sm font-bold text-slate-600"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="icon" className="rounded-xl relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full ring-2 ring-background"></span>
-            </Button>
-            <Button className="rounded-xl font-bold bg-primary shadow-lg shadow-primary/20">
-              <Plus className="w-4 h-4 mr-2" /> Action Rapide
+          <div className="flex items-center gap-5">
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+               <span className="text-[10px] font-black uppercase tracking-widest">IA : Optimisée</span>
+            </div>
+            <Button variant="outline" size="icon" className="rounded-xl relative h-11 w-11 border-slate-100 hover:bg-slate-50">
+              <Bell className="w-5 h-5 text-slate-500" />
+              <span className="absolute top-3 right-3 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white"></span>
             </Button>
           </div>
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-slate-50/50 dark:bg-slate-950">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
@@ -192,10 +202,10 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
           <Button 
             size="lg" 
             onClick={() => setAssistantOpen(!assistantOpen)}
-            className="h-14 w-14 rounded-2xl shadow-2xl bg-primary hover:bg-primary/90 flex items-center justify-center group relative overflow-hidden"
+            className="h-16 w-16 rounded-[24px] shadow-2xl bg-slate-900 hover:bg-black text-white flex items-center justify-center group relative overflow-hidden transition-all duration-500 hover:scale-110"
           >
-             <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-             <Bot className={cn("w-7 h-7 relative z-10 transition-transform", assistantOpen && "rotate-12 scale-110")} />
+             <div className="absolute inset-0 bg-blue-600 translate-y-full group-hover:translate-y-0 transition-transform duration-500" />
+             <Bot className={cn("w-8 h-8 relative z-10 transition-all duration-500", assistantOpen && "rotate-[360deg] scale-110")} />
           </Button>
         </div>
 
@@ -205,3 +215,5 @@ export const DashboardLayout = ({ children }: { children: React.ReactNode }) => 
     </div>
   );
 };
+
+import { Layers } from 'lucide-react';
