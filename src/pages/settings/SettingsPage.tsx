@@ -7,23 +7,23 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Building2, Bell, Shield, Palette, Save, User, Mail, Phone, Globe, CheckCircle2 } from 'lucide-react';
+import { Settings, Building2, Bell, Shield, Palette, Save, User, Mail, Phone, Globe, CheckCircle2, Share2, Eye, Network } from 'lucide-react';
 import { blink } from '@/lib/blink';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 export const SettingsPage = () => {
   const { user } = useAuth();
   const { company, refreshCompany } = useCompany();
   const [saving, setSaving] = useState(false);
+  const [listing, setListing] = useState<any>(null);
 
   const [profileForm, setProfileForm] = useState({ displayName: '', email: '', phone: '' });
   const [companyForm, setCompanyForm] = useState({ name: '', siret: '', address: '', legalStatus: '' });
-  const [notifications, setNotifications] = useState({
-    emailNewClient: true, emailNewInvoice: true, emailPayment: true,
-    smsAlerts: false, weeklyReport: true, monthlyReport: true,
-  });
+  const [publicForm, setPublicForm] = useState({ businessType: 'software', description: '', servicesOffered: '', isPublic: true });
 
   useEffect(() => {
     if (user) {
@@ -31,6 +31,19 @@ export const SettingsPage = () => {
     }
     if (company) {
       setCompanyForm({ name: company.name || '', siret: company.siret || '', address: company.address || '', legalStatus: company.legalStatus || 'SAS' });
+      // Fetch public listing
+      blink.db.publicBusinessListing.get({ companyId: company.id })
+        .then(res => {
+          if (res) {
+            setListing(res);
+            setPublicForm({
+              businessType: res.businessType || 'software',
+              description: res.description || '',
+              servicesOffered: res.servicesOffered || '',
+              isPublic: Number(res.isPublic) === 1
+            });
+          }
+        });
     }
   }, [user, company]);
 
@@ -54,6 +67,22 @@ export const SettingsPage = () => {
     } catch { toast.error('Erreur'); } finally { setSaving(false); }
   };
 
+  const savePublicProfile = async () => {
+    if (!company) return;
+    setSaving(true);
+    try {
+      await blink.db.publicBusinessListing.upsert({
+        id: listing?.id || `pub_${Date.now()}`,
+        companyId: company.id,
+        businessType: publicForm.businessType,
+        description: publicForm.description,
+        servicesOffered: publicForm.servicesOffered,
+        isPublic: publicForm.isPublic ? "1" : "0"
+      });
+      toast.success('Profil B2B mis à jour');
+    } catch { toast.error('Erreur'); } finally { setSaving(false); }
+  };
+
   const modules = [
     { id: 'erp', label: 'ERP Entreprise', description: 'Clients, produits, factures', enabled: true },
     { id: 'automation', label: 'Automatisations', description: 'Workflows automatisés', enabled: true },
@@ -74,6 +103,7 @@ export const SettingsPage = () => {
         <TabsList className="rounded-xl bg-muted/50 p-1 h-auto gap-1 flex-wrap">
           <TabsTrigger value="profile" className="rounded-lg font-bold gap-2"><User className="w-4 h-4" /> Profil</TabsTrigger>
           <TabsTrigger value="company" className="rounded-lg font-bold gap-2"><Building2 className="w-4 h-4" /> Société</TabsTrigger>
+          <TabsTrigger value="network" className="rounded-lg font-bold gap-2"><Share2 className="w-4 h-4" /> Réseau B2B</TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-lg font-bold gap-2"><Bell className="w-4 h-4" /> Notifications</TabsTrigger>
           <TabsTrigger value="modules" className="rounded-lg font-bold gap-2"><Settings className="w-4 h-4" /> Modules</TabsTrigger>
         </TabsList>
@@ -142,6 +172,70 @@ export const SettingsPage = () => {
               </div>
               <Button onClick={saveCompany} disabled={saving} className="rounded-xl font-bold">
                 <Save className="w-4 h-4 mr-2" /> {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* RESEAU B2B */}
+        <TabsContent value="network" className="mt-6">
+          <Card className="glass">
+            <CardHeader>
+              <CardTitle className="font-black tracking-tighter uppercase flex items-center gap-2">
+                <Network className="w-5 h-5 text-blue-600" /> Profil Réseau B2B
+              </CardTitle>
+              <CardDescription>Rendez votre entreprise visible pour recevoir des demandes de partenariat.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-3 h-3 rounded-full", publicForm.isPublic ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
+                  <div>
+                    <p className="text-sm font-black uppercase text-blue-600 tracking-widest">Visibilité Publique</p>
+                    <p className="text-xs text-slate-500 font-bold">Votre entreprise est {publicForm.isPublic ? "visible" : "masquée"} dans le catalogue B2B.</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={publicForm.isPublic}
+                  onCheckedChange={v => setPublicForm({...publicForm, isPublic: v})}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="font-bold">Type d'activité</Label>
+                  <Select value={publicForm.businessType} onValueChange={v => setPublicForm({...publicForm, businessType: v})}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="restaurant">Restaurant / Food</SelectItem>
+                      <SelectItem value="delivery_agency">Agence de Livraison</SelectItem>
+                      <SelectItem value="logistics">Logistique & Transport</SelectItem>
+                      <SelectItem value="software">SaaS / Logiciels</SelectItem>
+                      <SelectItem value="services">Services aux entreprises</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold">Services principaux</Label>
+                  <Input
+                    value={publicForm.servicesOffered}
+                    onChange={e => setPublicForm({...publicForm, servicesOffered: e.target.value})}
+                    className="rounded-xl"
+                    placeholder="Ex: Livraison urbaine, Conseil marketing..."
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="font-bold">Description publique</Label>
+                  <Textarea
+                    value={publicForm.description}
+                    onChange={e => setPublicForm({...publicForm, description: e.target.value})}
+                    className="rounded-xl min-h-[100px] resize-none"
+                    placeholder="Décrivez votre métier pour vos futurs partenaires..."
+                  />
+                </div>
+              </div>
+              <Button onClick={savePublicProfile} disabled={saving} className="rounded-xl font-bold bg-slate-900 hover:bg-black text-white px-8">
+                {saving ? 'Publication...' : 'Publier mon profil'}
               </Button>
             </CardContent>
           </Card>

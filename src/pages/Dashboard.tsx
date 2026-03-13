@@ -4,7 +4,7 @@ import {
   ArrowUpRight, ArrowDownRight, FileText, Truck,
   Target, Workflow, ArrowRight, Zap, Clock,
   ChevronRight, Calendar, AlertCircle, CheckCircle2,
-  Receipt, Wallet, Landmark
+  Receipt, Wallet, Landmark, Bot, Download, Plus, Network
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const StatCard = ({ title, value, subValue, trend, icon: Icon, loading, color }: any) => (
   <Card className="bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group overflow-hidden relative">
@@ -61,7 +62,7 @@ export const Dashboard = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const [clients, allInvoices, expenses, deliveries] = await Promise.all([
+        const [clients, allInvoices, expensesRes, deliveriesRes] = await Promise.all([
           blink.db.clients.count({ where: { companyId: company.id } }),
           blink.db.invoices.list({ where: { companyId: company.id }, limit: 1000 }),
           blink.db.expenses.list({ where: { companyId: company.id } }),
@@ -69,12 +70,12 @@ export const Dashboard = () => {
         ]);
 
         const totalRevenue = allInvoices.filter((i: any) => i.status === 'paid').reduce((s: number, i: any) => s + Number(i.amount || 0), 0);
-        const totalExpenses = expenses.reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+        const totalExpenses = expensesRes.reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
 
         setStats({
           clients, products: 0,
           invoices: allInvoices.length,
-          deliveries: deliveries.length,
+          deliveries: deliveriesRes.length,
           totalRevenue,
           expenses: totalExpenses
         });
@@ -331,5 +332,3 @@ export const Dashboard = () => {
     </div>
   );
 };
-
-import { Download, Network } from 'lucide-react';

@@ -19,7 +19,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   action?: {
-    type: 'create_client' | 'create_invoice' | 'create_expense' | 'analyze_margins';
+    type: 'create_client' | 'create_invoice' | 'create_expense' | 'connect_business';
     data: any;
     status: 'pending' | 'completed';
   };
@@ -48,16 +48,6 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
     const msg = messages[msgIndex];
     if (!msg.action || msg.action.status === 'completed') return;
 
-    if (msg.action.type === 'analyze_margins') {
-       setMessages(prev => {
-         const next = [...prev];
-         next[msgIndex].action!.status = 'completed';
-         next[msgIndex].content += "\n\n📊 **Analyse des marges Q1 :**\n- Marge brute moyenne : 32%\n- Point mort atteint : 12 Mars\n- Optimisation possible : Réduire les frais logistiques de 5% via le Réseau B2B.";
-         return next;
-       });
-       return;
-    }
-
     setLoading(true);
     try {
       if (msg.action.type === 'create_client') {
@@ -79,6 +69,16 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
           number: `FAC-${Date.now().toString().slice(-4)}`
         });
         toast.success(`Facture pour ${msg.action.data.clientName} créée par l'IA`);
+      } else if (msg.action.type === 'create_expense') {
+        await blink.db.expenses.create({
+          id: `exp_${Date.now()}`,
+          userId: user!.id,
+          companyId: company!.id,
+          ...msg.action.data,
+          date: new Date().toISOString().split('T')[0],
+          status: 'pending'
+        });
+        toast.success(`Dépense de ${msg.action.data.amount}€ enregistrée`);
       }
 
       setMessages(prev => {
@@ -107,16 +107,13 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
       const intentResult = await blink.ai.generateObject({
         prompt: `Analyse l'intention de l'utilisateur : "${userMsg}". 
         S'il veut créer quelque chose, extrais les données. 
-        Types supportés : 
-        - create_client (besoin de name, email?)
-        - create_invoice (besoin de clientName, amount)
-        - analyze_margins (si l'utilisateur veut une analyse financière ou parler de rentabilité)
+        Types supportés : create_client (name, email), create_invoice (clientName, amount), create_expense (title, amount, category).
         Si pas d'action claire, renvoie action: null.`,
         schema: {
           type: 'object',
           properties: {
             hasAction: { type: 'boolean' },
-            actionType: { type: 'string', enum: ['create_client', 'create_invoice', 'create_expense', 'analyze_margins', null] },
+            actionType: { type: 'string', enum: ['create_client', 'create_invoice', 'create_expense', 'connect_business', null] },
             data: { type: 'object' },
             response: { type: 'string' }
           }
@@ -126,11 +123,21 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
       const { hasAction, actionType, data, response } = intentResult.object as any;
 
       if (hasAction && actionType) {
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: response || `D'accord, j'ai préparé les données pour : ${actionType}. Voulez-vous que je valide l'action ?`,
-          action: { type: actionType, data, status: 'pending' }
-        }]);
+        if (actionType === 'analyze_finance') {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: "Je vais analyser vos données financières immédiatement...",
+            action: { type: actionType, data: {}, status: 'pending' }
+          }]);
+          // Auto-trigger analysis for better UX
+          setTimeout(() => performAction(messages.length + 1), 500);
+        } else {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: response || `D'accord, j'ai préparé les données pour : ${actionType}. Voulez-vous que je valide l'action ?`,
+            action: { type: actionType, data, status: 'pending' }
+          }]);
+        }
       } else {
         // Simple chat fallback
         let fullResponse = '';
@@ -224,7 +231,8 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                               <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                                 {m.action.type === 'create_client' && `Nouveau client : ${m.action.data.name}`}
                                 {m.action.type === 'create_invoice' && `Facture de ${m.action.data.amount}€ pour ${m.action.data.clientName}`}
-                                {m.action.type === 'analyze_margins' && `Analyse des marges`}
+                                {m.action.type === 'create_expense' && `Dépense : ${m.action.data.title} (${m.action.data.amount}€)`}
+                                {m.action.type === 'analyze_finance' && "Génération d'un rapport de santé financière..."}
                               </div>
                               <Button 
                                 size="sm" 
@@ -232,7 +240,7 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                                 disabled={loading}
                                 className="w-full h-8 rounded-lg font-black text-[10px] uppercase bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200"
                               >
-                                Confirmer l'action
+                                {m.action.type === 'analyze_finance' ? "Lancer l'analyse" : "Confirmer l'action"}
                               </Button>
                             </CardContent>
                           </Card>
@@ -254,8 +262,11 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                    <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée une facture de 1500€ pour le client 'Tech Solutions'")}>
                      <Receipt className="w-3 h-3 mr-1.5 text-blue-600" /> Facture
                    </Button>
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Liste mes dernières factures payées")}>
-                     <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Stats
+                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Enregistre une dépense de 50€ pour 'Fournitures de bureau'")}>
+                     <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Dépense
+                   </Button>
+                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Fais-moi un bilan financier de ma société")}>
+                     <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Bilan
                    </Button>
                 </div>
                 

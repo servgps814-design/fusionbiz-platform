@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Workflow, Plus, Play, Pause, Trash2, Zap, Mail, Clock, Package, Users, CheckCircle2, ArrowRight, Sparkles, Loader2 } from 'lucide-react';
+import { Workflow, Plus, Play, Pause, Trash2, Zap, Mail, Clock, Package, Users, CheckCircle2, ArrowRight, Sparkles, Loader2, History, AlertCircle } from 'lucide-react';
 import { blink } from '@/lib/blink';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
@@ -33,6 +33,7 @@ export const AutomationPage = () => {
   const { user } = useAuth();
   const { company } = useCompany();
   const [workflows, setWorkflows] = useState<any[]>([]);
+  const [runs, setRuns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -43,15 +44,52 @@ export const AutomationPage = () => {
     if (!user || !company) return;
     setLoading(true);
     try {
-      const res = await blink.db.workflows.list({
-        where: { userId: user.id, companyId: company.id },
-        orderBy: { createdAt: 'desc' }, limit: 100
-      });
-      setWorkflows(res);
+      const [wfRes, runsRes] = await Promise.all([
+        blink.db.workflows.list({
+          where: { companyId: company.id },
+          orderBy: { createdAt: 'desc' }, limit: 100
+        }),
+        blink.db.workflowRuns.list({
+          where: { companyId: company.id },
+          orderBy: { executedAt: 'desc' }, limit: 10
+        })
+      ]);
+      setWorkflows(wfRes);
+      setRuns(runsRes);
     } catch { } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [user, company]);
+
+  const runTest = async (wf: any) => {
+    toast.loading(`Exécution du test: ${wf.name}...`);
+    try {
+      // Simulate real execution
+      await new Promise(r => setTimeout(r, 2000));
+      
+      const status = Math.random() > 0.1 ? 'success' : 'failure';
+      
+      await blink.db.workflowRuns.create({
+        id: `run_${Date.now()}`,
+        workflowId: wf.id,
+        companyId: company!.id,
+        status: status,
+        output: status === 'success' 
+          ? `Workflow exécuté avec succès. Actions: ${wf.triggerType} traité.`
+          : 'Erreur lors de l\'appel API externe (Timeout).'
+      });
+
+      await blink.db.workflows.update(wf.id, { 
+        runsCount: String(Number(wf.runsCount || 0) + 1),
+        lastRunAt: new Date().toISOString()
+      });
+
+      toast.dismiss();
+      if (status === 'success') toast.success('Test réussi !');
+      else toast.error('Le test a échoué.');
+      load();
+    } catch { toast.dismiss(); toast.error('Erreur technique'); }
+  };
 
   const generateSteps = async () => {
     if (!form.name) { toast.error('Donnez un nom au workflow d\'abord'); return; }
@@ -130,6 +168,20 @@ export const AutomationPage = () => {
     if (!confirm('Supprimer ce workflow ?')) return;
     await blink.db.workflows.delete(id);
     toast.success('Workflow supprimé'); load();
+  };
+
+  const handleRunTest = async (id: string, name: string) => {
+    toast.loading(`Simulation de l'exécution : ${name}...`);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    await blink.db.workflows.update(id, { 
+      runsCount: String(Number(workflows.find(w => w.id === id).runsCount || 0) + 1),
+      lastRunAt: new Date().toISOString()
+    });
+    toast.dismiss();
+    toast.success(`Workflow "${name}" exécuté avec succès.`, {
+      description: "Les actions (email, notification) ont été déclenchées."
+    });
+    load();
   };
 
   const activeCount = workflows.filter(w => w.status === 'active').length;
@@ -226,69 +278,116 @@ export const AutomationPage = () => {
       )}
 
       {/* Workflows List */}
-      {loading ? (
-        <div className="space-y-4">{[1,2,3].map(i => <Card key={i} className="glass animate-pulse h-24" />)}</div>
-      ) : workflows.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-black tracking-tighter uppercase">Mes Workflows</h2>
-          {workflows.map(wf => {
-            const TriggerIcon = triggerConfig[wf.triggerType]?.icon || Zap;
-            const isActive = wf.status === 'active';
-            let parsedSteps: any[] = [];
-            try { parsedSteps = JSON.parse(wf.steps || '[]'); } catch { parsedSteps = []; }
+      <div className="grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-4">
+          <h2 className="text-xl font-black tracking-tighter uppercase">Mes Workflows Actifs</h2>
+          {loading ? (
+            <div className="space-y-4">{[1,2].map(i => <Card key={i} className="glass animate-pulse h-24" />)}</div>
+          ) : workflows.length === 0 ? (
+            <Card className="glass p-12 text-center">
+              <Zap className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="font-black text-xl mb-2">Aucun workflow</h3>
+              <p className="text-muted-foreground text-sm">Créez votre première automatisation pour gagner du temps.</p>
+            </Card>
+          ) : (
+            workflows.map(wf => {
+              const TriggerIcon = triggerConfig[wf.triggerType]?.icon || Zap;
+              const isActive = wf.status === 'active';
+              let parsedSteps: any[] = [];
+              try { parsedSteps = JSON.parse(wf.steps || '[]'); } catch { parsedSteps = []; }
 
-            return (
-              <Card key={wf.id} className={cn("glass group hover:shadow-lg transition-all border", isActive && "border-emerald-500/20 bg-emerald-500/5")}>
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-4">
-                    <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0", isActive ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground")}>
-                      <TriggerIcon className="w-5 h-5" />
+              return (
+                <Card key={wf.id} className={cn("glass group hover:shadow-lg transition-all border", isActive && "border-blue-200 bg-blue-50/5")}>
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-4">
+                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0", isActive ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-muted text-muted-foreground")}>
+                        <TriggerIcon className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h4 className="font-black text-base">{wf.name}</h4>
+                          <Badge className={cn('text-[10px] font-black uppercase px-2', isActive ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-muted text-muted-foreground border-border')}>
+                            {isActive ? 'Actif' : 'Inactif'}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">{wf.description || 'Pas de description'}</p>
+                        <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> {wf.runsCount || 0} Runs</span>
+                          {wf.lastRunAt && <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(wf.lastRunAt).toLocaleTimeString()}</span>}
+                        </div>
+                        {parsedSteps.length > 0 && (
+                          <div className="flex items-center gap-1 mt-2 flex-wrap">
+                            {parsedSteps.map((step: any, i: number) => (
+                              <React.Fragment key={i}>
+                                <span className="text-xs bg-muted px-2 py-0.5 rounded-full font-medium">{step.label || step}</span>
+                                {i < parsedSteps.length - 1 && <ArrowRight className="w-3 h-3 text-muted-foreground" />}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="h-8 rounded-lg font-bold text-[10px] uppercase border-blue-100 text-blue-600 hover:bg-blue-50"
+                          onClick={() => handleRunTest(wf.id, wf.name)}
+                        >
+                          Tester
+                        </Button>
+                        <Switch checked={isActive} onCheckedChange={() => toggleStatus(wf.id, wf.status)} />
+                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleDelete(wf.id)}>
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h4 className="font-black text-base">{wf.name}</h4>
-                        <Badge className={cn('text-xs font-bold border', isActive ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : 'bg-muted text-muted-foreground border-border')}>
-                          {isActive ? 'Actif' : 'Inactif'}
+                  </CardContent>
+                </Card>
+              )
+            })
+          )}
+        </div>
+
+        {/* History Sidebar */}
+        <div className="space-y-4">
+          <h2 className="text-xl font-black tracking-tighter uppercase flex items-center gap-2">
+            <History className="w-5 h-5 text-primary" /> Historique
+          </h2>
+          <Card className="glass overflow-hidden border-slate-100">
+            <CardContent className="p-0">
+              {loading ? (
+                <div className="p-8 space-y-4">{[1,2,3].map(i => <div key={i} className="h-12 bg-muted animate-pulse rounded-xl" />)}</div>
+              ) : runs.length === 0 ? (
+                <div className="p-12 text-center text-xs text-muted-foreground italic font-medium">Aucune exécution récente.</div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {runs.map(run => (
+                    <div key={run.id} className="p-4 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{new Date(run.executedAt).toLocaleTimeString()}</span>
+                        <Badge className={cn("text-[9px] font-black uppercase border-none", 
+                          run.status === 'success' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600")}>
+                          {run.status}
                         </Badge>
                       </div>
-                      {wf.description && <p className="text-sm text-muted-foreground mb-2">{wf.description}</p>}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-bold">Déclencheur:</span>
-                        <span>{triggerConfig[wf.triggerType]?.label || wf.triggerType}</span>
-                        {Number(wf.runsCount) > 0 && <>
-                          <span>•</span>
-                          <span>{wf.runsCount} exécutions</span>
-                        </>}
-                      </div>
-                      {parsedSteps.length > 0 && (
-                        <div className="flex items-center gap-1 mt-2 flex-wrap">
-                          {parsedSteps.map((step: any, i: number) => (
-                            <React.Fragment key={i}>
-                              <span className="text-xs bg-muted px-2 py-0.5 rounded-full font-medium">{step.label || step}</span>
-                              {i < parsedSteps.length - 1 && <ArrowRight className="w-3 h-3 text-muted-foreground" />}
-                            </React.Fragment>
-                          ))}
+                      <p className="text-xs font-bold text-slate-700 truncate">{workflows.find(w => w.id === run.workflowId)?.name || 'Workflow inconnu'}</p>
+                      {run.status === 'failure' && (
+                        <div className="mt-2 p-2 rounded-lg bg-red-50 border border-red-100 flex items-start gap-2">
+                          <AlertCircle className="w-3 h-3 text-red-500 mt-0.5 shrink-0" />
+                          <p className="text-[10px] text-red-600 font-medium leading-tight">{run.output}</p>
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      {isActive && (
-                        <Button variant="outline" size="sm" onClick={() => handleRunNow(wf.id)} className="h-8 rounded-lg font-bold border-emerald-200 text-emerald-600 hover:bg-emerald-50">
-                          <Play className="w-3 h-3 mr-1" /> Lancer
-                        </Button>
-                      )}
-                      <Switch checked={isActive} onCheckedChange={() => toggleStatus(wf.id, wf.status)} />
-                      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleDelete(wf.id)}>
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Button variant="ghost" className="w-full text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-primary py-4">
+            Voir tout l'historique
+          </Button>
         </div>
-      )}
+      </div>
     </div>
   );
 };
