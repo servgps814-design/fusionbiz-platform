@@ -15,21 +15,23 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { toast } from 'sonner';
 
+interface MessageAction {
+  type: string;
+  data: any;
+  status: 'pending' | 'completed';
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  action?: {
-    type: 'create_client' | 'create_invoice' | 'create_expense' | 'connect_business';
-    data: any;
-    status: 'pending' | 'completed';
-  };
+  action?: MessageAction;
 }
 
 export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) => {
   const { user } = useAuth();
   const { company } = useCompany();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Bonjour ! Je suis votre assistant FusionBiz. Je peux créer des clients, des factures ou analyser vos données. Que puis-je faire pour vous ?' }
+    { role: 'assistant', content: 'Bonjour ! Je suis votre assistant ORBiS. Je peux créer des clients, des factures, des dépenses ou analyser vos données financières. Que puis-je faire pour vous ?' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

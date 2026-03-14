@@ -24,16 +24,20 @@ export const SettingsPage = () => {
   const [profileForm, setProfileForm] = useState({ displayName: '', email: '', phone: '' });
   const [companyForm, setCompanyForm] = useState({ name: '', siret: '', address: '', legalStatus: '' });
   const [publicForm, setPublicForm] = useState({ businessType: 'software', description: '', servicesOffered: '', isPublic: true });
+  const [notifPrefs, setNotifPrefs] = useState({
+    newPayment: true, newOrder: true, weeklyReport: true, monthlyReport: false, smsAlerts: false,
+  });
 
   useEffect(() => {
     if (user) {
-      setProfileForm({ displayName: user.displayName || '', email: user.email || '', phone: user.phone || '' });
+      setProfileForm({ displayName: (user as any).displayName || '', email: user.email || '', phone: (user as any).phone || '' });
     }
     if (company) {
       setCompanyForm({ name: company.name || '', siret: company.siret || '', address: company.address || '', legalStatus: company.legalStatus || 'SAS' });
       // Fetch public listing
-      blink.db.publicBusinessListing.get({ companyId: company.id })
-        .then(res => {
+      blink.db.publicBusinessListing.list({ where: { companyId: company.id }, limit: 1 })
+        .then((rows: any[]) => {
+          const res = rows[0];
           if (res) {
             setListing(res);
             setPublicForm({
@@ -43,7 +47,8 @@ export const SettingsPage = () => {
               isPublic: Number(res.isPublic) === 1
             });
           }
-        });
+        })
+        .catch(() => {});
     }
   }, [user, company]);
 
@@ -118,10 +123,10 @@ export const SettingsPage = () => {
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
                 <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-3xl border-4 border-primary/20">
-                  {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+                  {((user as any)?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-black text-lg">{user?.displayName || 'Utilisateur'}</p>
+                  <p className="font-black text-lg">{(user as any)?.displayName || 'Utilisateur'}</p>
                   <p className="text-muted-foreground text-sm">{user?.email}</p>
                   {user?.email && <div className="flex items-center gap-1 mt-1"><CheckCircle2 className="w-3 h-3 text-emerald-500" /><span className="text-xs text-emerald-500 font-bold">Email vérifié</span></div>}
                 </div>
@@ -264,8 +269,8 @@ export const SettingsPage = () => {
                       <p className="text-xs text-muted-foreground">{notif.desc}</p>
                     </div>
                     <Switch
-                      checked={notifications[notif.key as keyof typeof notifications]}
-                      onCheckedChange={v => setNotifications({ ...notifications, [notif.key]: v })}
+                      checked={notifPrefs[notif.key as keyof typeof notifPrefs]}
+                      onCheckedChange={v => setNotifPrefs({ ...notifPrefs, [notif.key]: v })}
                     />
                   </div>
                 ))}
