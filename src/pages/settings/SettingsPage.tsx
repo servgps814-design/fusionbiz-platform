@@ -282,7 +282,7 @@ export const SettingsPage = () => {
                     <p className="font-bold text-sm">Alertes SMS critiques</p>
                     <p className="text-xs text-muted-foreground">Uniquement pour les événements importants</p>
                   </div>
-                  <Switch checked={notifications.smsAlerts} onCheckedChange={v => setNotifications({ ...notifications, smsAlerts: v })} />
+                  <Switch checked={notifPrefs.smsAlerts} onCheckedChange={v => setNotifPrefs({ ...notifPrefs, smsAlerts: v })} />
                 </div>
               </div>
               <Button className="rounded-xl font-bold" onClick={() => toast.success('Préférences sauvegardées')}>

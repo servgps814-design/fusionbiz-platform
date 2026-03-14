@@ -6,7 +6,10 @@ interface Company {
   id: string;
   name: string;
   siret: string;
-  isVerified: number;
+  isVerified: number | string;
+  address?: string;
+  legalStatus?: string;
+  logoUrl?: string;
 }
 
 interface CompanyContextType {

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   Plus, Search, MoreHorizontal, FileText, Loader2,
   Trash2, Edit, Filter, CheckCircle2, Clock,
-  AlertTriangle, Send, XCircle, Ban,
+  AlertTriangle, Send, XCircle, Ban, TrendingUp,
+  Euro, Receipt, ArrowUpRight,
 } from 'lucide-react';
 import { blink } from '@/lib/blink';
 import { useCompany } from '@/hooks/useCompany';
@@ -13,6 +14,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -26,13 +30,17 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface InvoiceItem {
-  name: string;
+  description: string;
   quantity: number;
   unitPrice: number;
   total: number;
@@ -40,21 +48,24 @@ interface InvoiceItem {
 
 interface Invoice {
   id: string;
-  number: string;
+  userId?: string;
+  companyId?: string;
+  clientId?: string;
   clientName: string;
   clientEmail?: string;
+  number: string;
+  status: string;
+  type: string;
   amount: number;
   taxRate: number;
-  status: string;
-  type?: string;
   dueDate?: string;
+  issueDate?: string;
   notes?: string;
   items?: string;
   createdAt: string;
-  companyId?: string;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 const fmtEur = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n || 0);
@@ -64,25 +75,47 @@ const fmtDate = (s?: string) =>
 
 const genId = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-// ─── Nav Tabs ─────────────────────────────────────────────────────────────────
+// ─── Nav Tabs ──────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { label: 'Devis',    href: '/dashboard/invoicing/quotes' },
+const INVOICE_TABS = [
+  { label: 'Devis', href: '/dashboard/invoicing/quotes' },
   { label: 'Factures', href: '/dashboard/invoicing/invoices' },
+  { label: 'Avoirs', href: '/dashboard/invoicing/credits' },
 ];
 
-// ─── Status Config ────────────────────────────────────────────────────────────
+function InvoicingTabs({ active }: { active: string }) {
+  return (
+    <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+      {INVOICE_TABS.map((t) => (
+        <Link
+          key={t.href}
+          to={t.href}
+          className={cn(
+            'px-4 py-1.5 rounded-md text-sm font-medium transition-all',
+            active === t.href
+              ? 'bg-background shadow-sm text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          {t.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// ─── Status Config ─────────────────────────────────────────────────────────────
 
 const STATUS_CFG: Record<string, { label: string; className: string; icon: React.ElementType }> = {
   draft:     { label: 'Brouillon',   className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700', icon: FileText },
-  sent:      { label: 'Envoyée',    className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-900',       icon: Send },
-  pending:   { label: 'En attente', className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900',  icon: Clock },
-  paid:      { label: 'Payée',      className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900', icon: CheckCircle2 },
-  overdue:   { label: 'En retard',  className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900',             icon: AlertTriangle },
-  cancelled: { label: 'Annulée',    className: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700', icon: Ban },
+  sent:      { label: 'Envoyée',     className: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-400 dark:border-blue-900',        icon: Send },
+  pending:   { label: 'En attente',  className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-400 dark:border-amber-900',   icon: Clock },
+  paid:      { label: 'Payée',       className: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-900', icon: CheckCircle2 },
+  overdue:   { label: 'En retard',   className: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-400 dark:border-red-900',              icon: AlertTriangle },
+  cancelled: { label: 'Annulée',     className: 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700', icon: Ban },
 };
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── Status Badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? STATUS_CFG.draft;
@@ -98,17 +131,18 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Invoice Form Dialog ──────────────────────────────────────────────────────
+// ─── Invoice Form (Sheet) ──────────────────────────────────────────────────────
 
-const EMPTY_ITEM: InvoiceItem = { name: '', quantity: 1, unitPrice: 0, total: 0 };
+const EMPTY_ITEM: InvoiceItem = { description: '', quantity: 1, unitPrice: 0, total: 0 };
 
-function InvoiceDialog({
-  open, onClose, onSave, initial,
+function InvoiceSheet({
+  open, onClose, onSave, initial, nextNumber,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
-  initial?: Partial<Invoice>;
+  initial?: Partial<Invoice> | null;
+  nextNumber: string;
 }) {
   const today = new Date().toISOString().split('T')[0];
   const inThirty = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
@@ -116,6 +150,7 @@ function InvoiceDialog({
   const [form, setForm] = useState({
     clientName: '',
     clientEmail: '',
+    number: nextNumber,
     issueDate: today,
     dueDate: inThirty,
     status: 'draft',
@@ -132,11 +167,12 @@ function InvoiceDialog({
       setForm({
         clientName: initial.clientName || '',
         clientEmail: initial.clientEmail || '',
-        issueDate: today,
+        number: initial.number || nextNumber,
+        issueDate: initial.issueDate || today,
         dueDate: initial.dueDate || inThirty,
         status: initial.status || 'draft',
         type: initial.type || 'invoice',
-        taxRate: Number(initial.taxRate || 20),
+        taxRate: Number(initial.taxRate ?? 20),
         notes: initial.notes || '',
       });
       try {
@@ -146,10 +182,14 @@ function InvoiceDialog({
         setItems([{ ...EMPTY_ITEM }]);
       }
     } else {
-      setForm({ clientName: '', clientEmail: '', issueDate: today, dueDate: inThirty, status: 'draft', type: 'invoice', taxRate: 20, notes: '' });
+      setForm({
+        clientName: '', clientEmail: '', number: nextNumber,
+        issueDate: today, dueDate: inThirty,
+        status: 'draft', type: 'invoice', taxRate: 20, notes: '',
+      });
       setItems([{ ...EMPTY_ITEM }]);
     }
-  }, [open]);
+  }, [open, initial, nextNumber]);
 
   const updateItem = (i: number, k: keyof InvoiceItem, v: string | number) => {
     setItems(prev => {
@@ -168,7 +208,7 @@ function InvoiceDialog({
 
   const handleSave = async () => {
     if (!form.clientName.trim()) { toast.error('Le nom du client est requis'); return; }
-    if (items.every(it => !it.name.trim())) { toast.error('Ajoutez au moins une ligne de prestation'); return; }
+    if (items.every(it => !it.description.trim())) { toast.error('Ajoutez au moins une ligne de prestation'); return; }
     setSaving(true);
     try {
       await onSave({ ...form, items, subtotalHT, taxAmount, totalTTC });
@@ -178,17 +218,17 @@ function InvoiceDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl rounded-2xl p-0 overflow-hidden">
-        <DialogHeader className="px-7 pt-7 pb-0">
-          <DialogTitle className="text-lg font-black tracking-tight">
+    <Sheet open={open} onOpenChange={v => !v && onClose()}>
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border">
+          <SheetTitle className="text-lg font-black tracking-tight">
             {initial ? 'Modifier la facture' : 'Nouvelle facture'}
-          </DialogTitle>
-          <DialogDescription>Renseignez les informations de la facture</DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <p className="text-sm text-muted-foreground">Renseignez les informations de la facture</p>
+        </SheetHeader>
 
-        <div className="px-7 py-6 space-y-5 max-h-[70vh] overflow-y-auto">
-          {/* Client & Type */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {/* Client info */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -198,7 +238,6 @@ function InvoiceDialog({
                 placeholder="Nom du client ou société"
                 value={form.clientName}
                 onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
-                className="rounded-xl"
               />
             </div>
             <div className="space-y-1.5">
@@ -208,54 +247,69 @@ function InvoiceDialog({
                 placeholder="contact@client.fr"
                 value={form.clientEmail}
                 onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))}
-                className="rounded-xl"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          {/* Dates & meta */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Numéro</Label>
+              <Input
+                value={form.number}
+                onChange={e => setForm(f => ({ ...f, number: e.target.value }))}
+              />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Type</Label>
               <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
-                <SelectTrigger className="rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="invoice">Facture</SelectItem>
-                  <SelectItem value="credit">Avoir</SelectItem>
+                  <SelectItem value="credit_note">Avoir</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date d'émission</Label>
-              <Input
-                type="date"
-                value={form.issueDate}
-                onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))}
-                className="rounded-xl"
-              />
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Émission</Label>
+              <Input type="date" value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Échéance</Label>
-              <Input
-                type="date"
-                value={form.dueDate}
-                onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                className="rounded-xl"
-              />
+              <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
             </div>
           </div>
+
+          {/* Status */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Statut</Label>
+              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Brouillon</SelectItem>
+                  <SelectItem value="sent">Envoyée</SelectItem>
+                  <SelectItem value="pending">En attente</SelectItem>
+                  <SelectItem value="paid">Payée</SelectItem>
+                  <SelectItem value="overdue">En retard</SelectItem>
+                  <SelectItem value="cancelled">Annulée</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <Separator />
 
           {/* Line items */}
           <div className="space-y-2">
             <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Lignes de facturation</Label>
             <div className="border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50">
+                <thead className="bg-muted/60">
                   <tr>
                     <th className="text-left px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Description</th>
                     <th className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground w-16 text-center">Qté</th>
-                    <th className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground w-28 text-right">Prix unit.</th>
+                    <th className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground w-28 text-right">Prix unit. HT</th>
                     <th className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground w-24 text-right">Total HT</th>
                     <th className="w-8" />
                   </tr>
@@ -266,28 +320,25 @@ function InvoiceDialog({
                       <td className="px-2 py-1.5">
                         <Input
                           placeholder="Prestation ou produit..."
-                          value={item.name}
-                          onChange={e => updateItem(i, 'name', e.target.value)}
-                          className="border-0 shadow-none rounded-lg h-8 text-sm"
+                          value={item.description}
+                          onChange={e => updateItem(i, 'description', e.target.value)}
+                          className="border-0 shadow-none h-8 text-sm"
                         />
                       </td>
                       <td className="px-2 py-1.5">
                         <Input
-                          type="number"
-                          min="0"
+                          type="number" min="0"
                           value={item.quantity}
                           onChange={e => updateItem(i, 'quantity', Number(e.target.value))}
-                          className="border-0 shadow-none rounded-lg h-8 text-sm text-center"
+                          className="border-0 shadow-none h-8 text-sm text-center"
                         />
                       </td>
                       <td className="px-2 py-1.5">
                         <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="number" min="0" step="0.01"
                           value={item.unitPrice}
                           onChange={e => updateItem(i, 'unitPrice', Number(e.target.value))}
-                          className="border-0 shadow-none rounded-lg h-8 text-sm text-right"
+                          className="border-0 shadow-none h-8 text-sm text-right"
                         />
                       </td>
                       <td className="px-3 py-1.5 text-right font-bold text-xs tabular-nums">{fmtEur(item.total)}</td>
@@ -326,11 +377,8 @@ function InvoiceDialog({
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">TVA</span>
                 <div className="flex items-center gap-2">
-                  <Select
-                    value={String(form.taxRate)}
-                    onValueChange={v => setForm(f => ({ ...f, taxRate: Number(v) }))}
-                  >
-                    <SelectTrigger className="h-7 w-[72px] rounded-lg text-xs">
+                  <Select value={String(form.taxRate)} onValueChange={v => setForm(f => ({ ...f, taxRate: Number(v) }))}>
+                    <SelectTrigger className="h-7 w-[72px] text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -357,52 +405,56 @@ function InvoiceDialog({
               placeholder="IBAN, RIB, conditions de règlement..."
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              className="rounded-xl resize-none text-sm"
+              className="resize-none text-sm"
               rows={3}
             />
           </div>
         </div>
 
-        <DialogFooter className="px-7 pb-7 pt-4 border-t border-border gap-2">
-          <Button variant="outline" onClick={onClose} className="rounded-xl">Annuler</Button>
-          <Button onClick={handleSave} disabled={saving} className="rounded-xl min-w-[140px]">
+        <div className="border-t border-border px-6 py-4 flex justify-end gap-3 bg-background">
+          <Button variant="outline" onClick={onClose}>Annuler</Button>
+          <Button onClick={handleSave} disabled={saving} className="min-w-[140px]">
             {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-            {initial ? 'Enregistrer' : 'Créer la facture'}
+            {initial ? 'Enregistrer les modifications' : 'Créer la facture'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export const InvoicesPage = () => {
+  const location = useLocation();
   const { company } = useCompany();
   const { user } = useAuth();
+  const isCreditsView = location.pathname.includes('/credits');
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  // ─── Stats ────────────────────────────────────────────────────────────────
+  // ─── Stats ─────────────────────────────────────────────────────────────────
+  const totalBilled  = invoices.reduce((s, i) => s + Number(i.amount || 0), 0);
   const totalPaid    = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.amount || 0), 0);
   const totalPending = invoices.filter(i => ['pending', 'sent'].includes(i.status)).reduce((s, i) => s + Number(i.amount || 0), 0);
   const totalOverdue = invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + Number(i.amount || 0), 0);
 
-  // ─── Load ─────────────────────────────────────────────────────────────────
+  // ─── Load ───────────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    if (!company) return;
+    if (!user) return;
     setLoading(true);
     try {
       const data = await blink.db.invoices.list({
-        where: { companyId: company.id },
+        where: { userId: user.id },
         orderBy: { createdAt: 'desc' },
-        limit: 100,
+        limit: 200,
       });
       setInvoices(data as Invoice[]);
     } catch {
@@ -410,57 +462,70 @@ export const InvoicesPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [company]);
+  }, [user]);
 
   useEffect(() => { load(); }, [load]);
 
-  // ─── Save (create / update) ───────────────────────────────────────────────
+  // ─── Next number ────────────────────────────────────────────────────────────
+  const getNextNumber = (): string => {
+    const prefix = isCreditsView ? 'AVO' : 'FAC';
+    const year = new Date().getFullYear();
+    const relevant = invoices.filter(i =>
+      isCreditsView ? i.type === 'credit_note' : i.type !== 'credit_note'
+    );
+    return `${prefix}-${year}-${String(relevant.length + 1).padStart(3, '0')}`;
+  };
+
+  // ─── Save (create / update) ─────────────────────────────────────────────────
   const handleSave = async (data: any) => {
-    if (!company || !user) return;
+    if (!user) return;
     try {
       if (editInvoice) {
         await blink.db.invoices.update(editInvoice.id, {
           clientName: data.clientName,
+          clientEmail: data.clientEmail || null,
+          number: data.number,
           status: data.status,
           type: data.type,
           amount: data.totalTTC,
           taxRate: data.taxRate,
-          dueDate: data.dueDate,
+          dueDate: data.dueDate || null,
           notes: data.notes || null,
           items: JSON.stringify(data.items),
         });
-        toast.success('Facture mise à jour');
+        toast.success('Facture mise à jour avec succès');
       } else {
-        const count = await blink.db.invoices.count({ where: { companyId: company.id } });
-        const prefix = data.type === 'credit' ? 'AVO' : 'FAC';
-        const number = `${prefix}-${new Date().getFullYear()}-${String((count as number) + 1).padStart(3, '0')}`;
+        const id = `inv_${genId()}`;
         await blink.db.invoices.create({
-          id: `inv_${genId()}`,
+          id,
           userId: user.id,
-          companyId: company.id,
-          number,
+          companyId: company?.id || null,
+          number: data.number,
           clientName: data.clientName,
+          clientEmail: data.clientEmail || null,
           status: data.status,
           type: data.type,
           amount: data.totalTTC,
           taxRate: data.taxRate,
-          dueDate: data.dueDate,
+          dueDate: data.dueDate || null,
           notes: data.notes || null,
           items: JSON.stringify(data.items),
+          createdAt: new Date().toISOString(),
         });
-        toast.success(`Facture ${number} créée avec succès`);
+        toast.success(`Facture ${data.number} créée avec succès`);
       }
-      setDialogOpen(false);
+      setSheetOpen(false);
       setEditInvoice(null);
       load();
     } catch {
-      toast.error('Erreur lors de la sauvegarde');
+      toast.error('Erreur lors de la sauvegarde de la facture');
     }
   };
 
-  // ─── Delete ───────────────────────────────────────────────────────────────
+  // ─── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteId) return;
+    setDeleting(true);
     try {
       await blink.db.invoices.delete(deleteId);
       toast.success('Facture supprimée');
@@ -468,33 +533,28 @@ export const InvoicesPage = () => {
       load();
     } catch {
       toast.error('Erreur lors de la suppression');
+    } finally {
+      setDeleting(false);
     }
   };
 
-  // ─── Mark paid ────────────────────────────────────────────────────────────
-  const handleMarkPaid = async (inv: Invoice) => {
-    try {
-      await blink.db.invoices.update(inv.id, { status: 'paid' });
-      toast.success(`Facture ${inv.number} marquée comme payée`);
-      load();
-    } catch {
-      toast.error('Erreur lors de la mise à jour');
-    }
-  };
-
-  // ─── Status change ────────────────────────────────────────────────────────
-  const handleStatusChange = async (id: string, status: string) => {
+  // ─── Status change helpers ──────────────────────────────────────────────────
+  const handleStatusChange = async (id: string, status: string, label?: string) => {
     try {
       await blink.db.invoices.update(id, { status });
-      toast.success('Statut mis à jour');
+      toast.success(label || 'Statut mis à jour');
       load();
     } catch {
-      toast.error('Erreur lors de la mise à jour');
+      toast.error('Erreur lors de la mise à jour du statut');
     }
   };
 
-  // ─── Filter ───────────────────────────────────────────────────────────────
-  const filtered = invoices.filter(inv => {
+  // ─── Filter ─────────────────────────────────────────────────────────────────
+  const viewInvoices = isCreditsView
+    ? invoices.filter(i => i.type === 'credit_note')
+    : invoices.filter(i => i.type !== 'credit_note');
+
+  const filtered = viewInvoices.filter(inv => {
     const matchSearch = !search ||
       inv.clientName?.toLowerCase().includes(search.toLowerCase()) ||
       inv.number?.toLowerCase().includes(search.toLowerCase());
@@ -502,55 +562,60 @@ export const InvoicesPage = () => {
     return matchSearch && matchStatus;
   });
 
+  // ─── Open create ─────────────────────────────────────────────────────────────
+  const openCreate = () => {
+    setEditInvoice(null);
+    setSheetOpen(true);
+  };
+
+  const openEdit = (inv: Invoice) => {
+    setEditInvoice(inv);
+    setSheetOpen(true);
+  };
+
+  const pageTitle = isCreditsView ? 'Avoirs' : 'Factures';
+  const pageSubtitle = isCreditsView ? 'Gérez vos avoirs et notes de crédit' : 'Gérez vos factures clients';
+  const createLabel = isCreditsView ? 'Nouvel avoir' : 'Nouvelle facture';
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
       {/* Header */}
-      <div className="page-header">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Devis & Facturation</h1>
-          <p className="page-subtitle">Gérez vos devis, factures et avoirs</p>
+          <h1 className="page-title">{pageTitle}</h1>
+          <p className="page-subtitle">{pageSubtitle}</p>
         </div>
-        <Button
-          onClick={() => { setEditInvoice(null); setDialogOpen(true); }}
-          className="gap-2"
-        >
+        <Button onClick={openCreate} className="gap-2 shrink-0">
           <Plus className="w-4 h-4" />
-          Nouvelle facture
+          {createLabel}
         </Button>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
-        {TABS.map(tab => (
-          <Link
-            key={tab.href}
-            to={tab.href}
-            className={cn(
-              'px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors -mb-px',
-              tab.href.includes('invoices')
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </div>
+      <InvoicingTabs active={location.pathname} />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="metric-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Encaissé</p>
-          <p className="text-2xl font-black text-emerald-600 tabular-nums">{fmtEur(totalPaid)}</p>
-        </div>
-        <div className="metric-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">En attente</p>
-          <p className="text-2xl font-black text-amber-600 tabular-nums">{fmtEur(totalPending)}</p>
-        </div>
-        <div className="metric-card">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-1">En retard</p>
-          <p className="text-2xl font-black text-red-600 tabular-nums">{fmtEur(totalOverdue)}</p>
-        </div>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total facturé', value: fmtEur(totalBilled), icon: Receipt, color: 'text-foreground', loading },
+          { label: 'Encaissé', value: fmtEur(totalPaid), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', loading },
+          { label: 'En attente', value: fmtEur(totalPending), icon: Clock, color: 'text-amber-600 dark:text-amber-400', loading },
+          { label: 'En retard', value: fmtEur(totalOverdue), icon: AlertTriangle, color: 'text-red-600 dark:text-red-400', loading },
+        ].map((stat, i) => (
+          <Card key={i} className="border-border/60">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{stat.label}</p>
+                <stat.icon className={cn('w-4 h-4', stat.color)} />
+              </div>
+              {loading ? (
+                <Skeleton className="h-7 w-28 mt-1" />
+              ) : (
+                <p className={cn('text-xl font-black tabular-nums tracking-tight', stat.color)}>{stat.value}</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Filters */}
@@ -558,15 +623,15 @@ export const InvoicesPage = () => {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Rechercher une facture..."
+            placeholder="Rechercher par numéro ou client..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-44">
-            <Filter className="w-4 h-4 mr-2 text-muted-foreground flex-shrink-0" />
+          <SelectTrigger className="w-full sm:w-48">
+            <Filter className="w-4 h-4 mr-2 text-muted-foreground shrink-0" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -582,146 +647,150 @@ export const InvoicesPage = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {loading ? (
-          <div className="p-6 space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-4 flex-1" />
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-6 w-20 rounded-full" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <FileText className="w-6 h-6 text-muted-foreground" />
-            </div>
-            <p className="font-semibold text-foreground">Aucune facture trouvée</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {search || statusFilter !== 'all'
-                ? 'Aucun résultat pour ces critères'
-                : 'Créez votre première facture pour commencer'}
-            </p>
-            {!search && statusFilter === 'all' && (
-              <Button
-                size="sm"
-                className="mt-4 gap-2"
-                onClick={() => { setEditInvoice(null); setDialogOpen(true); }}
-              >
-                <Plus className="w-4 h-4" /> Nouvelle facture
-              </Button>
-            )}
-          </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Numéro</th>
-                <th>Client</th>
-                <th>Montant TTC</th>
-                <th>Statut</th>
-                <th>Échéance</th>
-                <th>Type</th>
-                <th className="w-12" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(inv => (
-                <tr key={inv.id}>
-                  <td className="font-mono text-sm font-semibold text-primary">{inv.number}</td>
-                  <td>
-                    <div className="font-semibold text-sm">{inv.clientName}</div>
-                    {inv.clientEmail && (
-                      <div className="text-xs text-muted-foreground">{inv.clientEmail}</div>
-                    )}
-                  </td>
-                  <td className="font-bold tabular-nums">{fmtEur(Number(inv.amount || 0))}</td>
-                  <td><StatusBadge status={inv.status} /></td>
-                  <td className="text-sm text-muted-foreground">{fmtDate(inv.dueDate)}</td>
-                  <td>
-                    <span className={cn(
-                      'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
-                      inv.type === 'credit'
-                        ? 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-400'
-                        : 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-400'
-                    )}>
-                      {inv.type === 'credit' ? 'Avoir' : 'Facture'}
-                    </span>
-                  </td>
-                  <td>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-52 rounded-xl">
-                        <DropdownMenuItem
-                          onClick={() => { setEditInvoice(inv); setDialogOpen(true); }}
-                          className="gap-2 cursor-pointer"
-                        >
-                          <Edit className="w-4 h-4" /> Modifier
-                        </DropdownMenuItem>
-
-                        {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                          <DropdownMenuItem
-                            onClick={() => handleMarkPaid(inv)}
-                            className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600"
-                          >
-                            <CheckCircle2 className="w-4 h-4" /> Marquer comme payée
-                          </DropdownMenuItem>
-                        )}
-
-                        {inv.status === 'draft' && (
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(inv.id, 'sent')}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Send className="w-4 h-4" /> Marquer envoyée
-                          </DropdownMenuItem>
-                        )}
-
-                        {['sent', 'pending'].includes(inv.status) && (
-                          <DropdownMenuItem
-                            onClick={() => handleStatusChange(inv.id, 'overdue')}
-                            className="gap-2 cursor-pointer text-red-600 focus:text-red-600"
-                          >
-                            <AlertTriangle className="w-4 h-4" /> Marquer en retard
-                          </DropdownMenuItem>
-                        )}
-
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setDeleteId(inv.id)}
-                          className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" /> Supprimer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
+      <Card className="border-border/60 overflow-hidden">
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="p-6 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
               ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                <FileText className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <p className="font-semibold text-foreground mb-1">
+                {search || statusFilter !== 'all' ? 'Aucun résultat' : `Aucune ${isCreditsView ? 'avoir' : 'facture'} trouvée`}
+              </p>
+              <p className="text-sm text-muted-foreground mb-4">
+                {search || statusFilter !== 'all'
+                  ? 'Aucun document ne correspond à ces critères'
+                  : `Créez votre premier ${isCreditsView ? 'avoir' : 'facture'} pour commencer`}
+              </p>
+              {!search && statusFilter === 'all' && (
+                <Button size="sm" className="gap-2" onClick={openCreate}>
+                  <Plus className="w-4 h-4" /> {createLabel}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="text-xs font-black uppercase tracking-wider">Numéro</TableHead>
+                    <TableHead className="text-xs font-black uppercase tracking-wider">Client</TableHead>
+                    <TableHead className="text-xs font-black uppercase tracking-wider text-right">Montant TTC</TableHead>
+                    <TableHead className="text-xs font-black uppercase tracking-wider">Statut</TableHead>
+                    <TableHead className="text-xs font-black uppercase tracking-wider">Échéance</TableHead>
+                    <TableHead className="text-xs font-black uppercase tracking-wider">Type</TableHead>
+                    <TableHead className="w-12" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(inv => (
+                    <TableRow
+                      key={inv.id}
+                      className="cursor-pointer hover:bg-muted/30 transition-colors"
+                      onClick={() => openEdit(inv)}
+                    >
+                      <TableCell>
+                        <span className="font-mono text-xs font-bold text-primary">{inv.number}</span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-semibold text-sm">{inv.clientName}</div>
+                        {inv.clientEmail && (
+                          <div className="text-xs text-muted-foreground">{inv.clientEmail}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-bold tabular-nums">
+                        {fmtEur(Number(inv.amount || 0))}
+                      </TableCell>
+                      <TableCell><StatusBadge status={inv.status} /></TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{fmtDate(inv.dueDate)}</TableCell>
+                      <TableCell>
+                        <span className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider',
+                          inv.type === 'credit_note'
+                            ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400'
+                            : 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400'
+                        )}>
+                          {inv.type === 'credit_note' ? 'Avoir' : 'Facture'}
+                        </span>
+                      </TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem onClick={() => openEdit(inv)} className="gap-2 cursor-pointer">
+                              <Edit className="w-4 h-4" /> Modifier
+                            </DropdownMenuItem>
+                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                              <DropdownMenuItem
+                                onClick={() => handleStatusChange(inv.id, 'paid', `Facture ${inv.number} marquée comme payée`)}
+                                className="gap-2 cursor-pointer text-emerald-600 focus:text-emerald-600"
+                              >
+                                <CheckCircle2 className="w-4 h-4" /> Marquer comme payée
+                              </DropdownMenuItem>
+                            )}
+                            {inv.status === 'draft' && (
+                              <DropdownMenuItem
+                                onClick={() => handleStatusChange(inv.id, 'sent', 'Facture marquée comme envoyée')}
+                                className="gap-2 cursor-pointer"
+                              >
+                                <Send className="w-4 h-4" /> Marquer envoyée
+                              </DropdownMenuItem>
+                            )}
+                            {['sent', 'pending'].includes(inv.status) && (
+                              <DropdownMenuItem
+                                onClick={() => handleStatusChange(inv.id, 'overdue', 'Facture marquée en retard')}
+                                className="gap-2 cursor-pointer text-red-600 focus:text-red-600"
+                              >
+                                <AlertTriangle className="w-4 h-4" /> Marquer en retard
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteId(inv.id)}
+                              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4" /> Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Invoice dialog */}
-      <InvoiceDialog
-        open={dialogOpen}
-        onClose={() => { setDialogOpen(false); setEditInvoice(null); }}
+      {/* Sheet */}
+      <InvoiceSheet
+        open={sheetOpen}
+        onClose={() => { setSheetOpen(false); setEditInvoice(null); }}
         onSave={handleSave}
-        initial={editInvoice || undefined}
+        initial={editInvoice}
+        nextNumber={getNextNumber()}
       />
 
       {/* Delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer cette facture ?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -729,11 +798,13 @@ export const InvoicesPage = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Annuler</AlertDialogCancel>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="rounded-xl bg-destructive hover:bg-destructive/90"
+              disabled={deleting}
+              className="bg-destructive hover:bg-destructive/90"
             >
+              {deleting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>
