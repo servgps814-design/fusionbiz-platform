@@ -1,362 +1,438 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Globe, Store, Plus, Settings2, ExternalLink, Copy, Check, Loader2, Trash2,
+  Globe, ExternalLink, Eye, Settings, Palette, Layout,
+  Store, TrendingUp, Plus, Edit2, Loader2, ToggleLeft, ToggleRight,
+  ShoppingBag, Link2,
 } from 'lucide-react';
 import { blink } from '@/lib/blink';
-import { useCompany } from '@/hooks/useCompany';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompany } from '@/hooks/useCompany';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogDescription, DialogFooter,
-} from '@/components/ui/dialog';
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
+} from '@/components/ui/sheet';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-interface StoreItem {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  status: string;
-  currency?: string;
-  createdAt?: string;
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
-export const StorefrontPage = () => {
-  const { company } = useCompany();
+const slugify = (s: string) =>
+  s.toLowerCase().trim()
+    .replace(/[àáâãäå]/g, 'a').replace(/[èéêë]/g, 'e')
+    .replace(/[ìíîï]/g, 'i').replace(/[òóôõö]/g, 'o')
+    .replace(/[ùúûü]/g, 'u').replace(/[ç]/g, 'c')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+const THEMES = [
+  { value: 'modern',  label: 'Moderne' },
+  { value: 'classic', label: 'Classique' },
+  { value: 'minimal', label: 'Minimal' },
+];
+
+// ─── StorefrontPage ───────────────────────────────────────────────────────────
+
+export function StorefrontPage() {
   const { user } = useAuth();
-  const [stores, setStores] = useState<StoreItem[]>([]);
+  const { company } = useCompany();
+  const [store, setStore] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', slug: '', description: '' });
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  const emptyCreate = { name: '', slug: '', description: '', theme: 'modern', currency: 'EUR', country: 'France' };
+  const [createForm, setCreateForm] = useState(emptyCreate);
+  const [editForm, setEditForm] = useState({ name: '', slug: '', description: '', theme: 'modern' });
+
+  // ── Load store ─────────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
-    if (!company) return;
+    if (!company || !user) return;
     setLoading(true);
     try {
       const data = await blink.db.stores.list({
         where: { organizationId: company.id },
-        orderBy: { createdAt: 'desc' },
-        limit: 20,
+        limit: 1,
       });
-      setStores(data as StoreItem[]);
-    } catch {
-      toast.error('Erreur de chargement');
-    } finally {
-      setLoading(false);
-    }
-  }, [company]);
+      setStore((data as any[])[0] ?? null);
+    } catch { setStore(null); } finally { setLoading(false); }
+  }, [company, user]);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleCreate = async () => {
-    if (!form.name.trim()) { toast.error('Nom requis'); return; }
-    if (!company || !user) return;
+  // ── Create store ───────────────────────────────────────────────────────────
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createForm.name.trim()) { toast.error('Le nom est requis'); return; }
+    if (!createForm.slug.trim()) { toast.error('Le slug est requis'); return; }
     setSaving(true);
     try {
-      const slug =
-        form.slug ||
-        form.name
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '');
-      await blink.db.stores.create({
-        id: `store_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        userId: user.id,
-        organizationId: company.id,
-        name: form.name,
-        slug,
-        description: form.description || null,
+      const created = await blink.db.stores.create({
+        id: `store_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        userId: user!.id,
+        organizationId: company!.id,
+        name: createForm.name,
+        slug: createForm.slug,
+        description: createForm.description,
+        theme: createForm.theme,
+        currency: createForm.currency,
+        country: createForm.country,
         status: 'active',
-        currency: 'EUR',
-        country: 'France',
-        language: 'fr',
-        theme: 'modern',
       });
-      toast.success('Boutique créée !');
-      setDialogOpen(false);
-      setForm({ name: '', slug: '', description: '' });
-      load();
-    } catch {
-      toast.error('Erreur lors de la création');
-    } finally {
-      setSaving(false);
-    }
+      toast.success('Boutique créée avec succès !');
+      setCreateOpen(false);
+      setCreateForm(emptyCreate);
+      setStore(created as any);
+    } catch { toast.error('Erreur lors de la création'); } finally { setSaving(false); }
   };
 
-  const handleDelete = async () => {
-    if (!deleteId) return;
+  // ── Edit store ─────────────────────────────────────────────────────────────
+
+  const openEdit = () => {
+    if (!store) return;
+    setEditForm({ name: store.name || '', slug: store.slug || '', description: store.description || '', theme: store.theme || 'modern' });
+    setEditOpen(true);
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store) return;
+    setSaving(true);
     try {
-      await blink.db.stores.delete(deleteId);
-      toast.success('Boutique supprimée');
-      setDeleteId(null);
-      load();
-    } catch {
-      toast.error('Erreur de suppression');
-    }
+      await blink.db.stores.update(store.id, {
+        name: editForm.name, slug: editForm.slug,
+        description: editForm.description, theme: editForm.theme,
+      });
+      toast.success('Boutique mise à jour');
+      setStore((prev: any) => ({ ...prev, ...editForm }));
+      setEditOpen(false);
+    } catch { toast.error('Erreur'); } finally { setSaving(false); }
   };
 
-  const copyUrl = (store: StoreItem) => {
-    const url = `https://shop.orbis.fr/${store.slug}`;
-    navigator.clipboard.writeText(url).catch(() => {});
-    setCopiedId(store.id);
-    setTimeout(() => setCopiedId(null), 2000);
-    toast.success('URL copiée !');
+  // ── Toggle store status ────────────────────────────────────────────────────
+
+  const toggleStatus = async () => {
+    if (!store) return;
+    const next = store.status === 'active' ? 'inactive' : 'active';
+    setToggling(true);
+    try {
+      await blink.db.stores.update(store.id, { status: next });
+      setStore((prev: any) => ({ ...prev, status: next }));
+      toast.success(next === 'active' ? 'Boutique activée' : 'Boutique désactivée');
+    } catch { toast.error('Erreur'); } finally { setToggling(false); }
   };
 
-  const openStore = (store: StoreItem) => {
-    window.open(`https://shop.orbis.fr/${store.slug}`, '_blank', 'noopener');
-  };
+  // ── Loading skeleton ───────────────────────────────────────────────────────
+
+  if (!company || !user) return null;
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in space-y-6">
+        <div className="page-header">
+          <div><h1 className="page-title">Vitrine</h1><p className="page-subtitle">Gérez votre boutique en ligne</p></div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  // ── No store: Onboarding ───────────────────────────────────────────────────
+
+  if (!store) {
+    return (
+      <div className="animate-fade-in space-y-6">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Vitrine</h1>
+            <p className="page-subtitle">Créez et gérez votre boutique en ligne</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <Card className="max-w-md w-full text-center shadow-lg">
+            <CardHeader className="pb-2">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Store className="w-8 h-8 text-primary" />
+              </div>
+              <CardTitle className="text-xl">Créez votre boutique en ligne</CardTitle>
+              <CardDescription>
+                Lancez votre boutique en quelques minutes et commencez à vendre vos produits en ligne.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+                <SheetTrigger asChild>
+                  <Button size="lg" className="gap-2 w-full shadow-lg shadow-primary/20">
+                    <Plus className="w-5 h-5" />
+                    Créer ma boutique
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+                  <SheetHeader>
+                    <SheetTitle>Créer votre boutique</SheetTitle>
+                  </SheetHeader>
+                  <form onSubmit={handleCreate} className="mt-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <Label>Nom de la boutique *</Label>
+                      <Input
+                        placeholder="Ma Boutique"
+                        value={createForm.name}
+                        onChange={e => {
+                          const name = e.target.value;
+                          setCreateForm(p => ({ ...p, name, slug: p.slug || slugify(name) }));
+                        }}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Slug (URL) *</Label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">orbis.fr/</span>
+                        <Input
+                          placeholder="ma-boutique"
+                          value={createForm.slug}
+                          onChange={e => setCreateForm(p => ({ ...p, slug: slugify(e.target.value) }))}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Description</Label>
+                      <Textarea rows={2} placeholder="Décrivez votre boutique..." value={createForm.description} onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Thème</Label>
+                        <Select value={createForm.theme} onValueChange={v => setCreateForm(p => ({ ...p, theme: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {THEMES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Devise</Label>
+                        <Input value={createForm.currency} disabled className="bg-muted" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Pays</Label>
+                      <Input value={createForm.country} disabled className="bg-muted" />
+                    </div>
+                    <Separator />
+                    <div className="flex gap-3 justify-end">
+                      <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Annuler</Button>
+                      <Button type="submit" disabled={saving} className="gap-2">
+                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Créer ma boutique
+                      </Button>
+                    </div>
+                  </form>
+                </SheetContent>
+              </Sheet>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Store exists ───────────────────────────────────────────────────────────
+
+  const storeUrl = `votre-boutique.orbis.fr/${store.slug}`;
+  const themeLabel = THEMES.find(t => t.value === store.theme)?.label ?? store.theme;
 
   return (
-    <div className="p-6 lg:p-8 animate-in-up space-y-6">
-      {/* Header */}
+    <div className="animate-fade-in space-y-6">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Vitrine en ligne</h1>
-          <p className="page-subtitle">Gérez vos boutiques en ligne</p>
+          <h1 className="page-title">Vitrine</h1>
+          <p className="page-subtitle">Gérez l'apparence et le contenu de votre boutique en ligne</p>
         </div>
-        <Button
-          onClick={() => setDialogOpen(true)}
-          className="rounded-xl gap-2 shadow-lg shadow-primary/20"
-        >
-          <Plus className="w-4 h-4" />
-          Créer une boutique
-        </Button>
-      </div>
-
-      {/* Content */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-52 rounded-xl" />
-          ))}
-        </div>
-      ) : stores.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-border rounded-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-5">
-            <Store className="w-8 h-8 text-primary" />
-          </div>
-          <h3 className="text-xl font-black tracking-tight mb-2">Aucune boutique</h3>
-          <p className="text-sm text-muted-foreground mb-6">
-            Créez votre première boutique en ligne
-          </p>
-          <Button onClick={() => setDialogOpen(true)} className="rounded-xl gap-2">
-            <Plus className="w-4 h-4" />
-            Créer ma boutique
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="rounded-xl gap-2" onClick={() => window.open(`https://${storeUrl}`, '_blank')}>
+            <Eye className="w-4 h-4" />Prévisualiser
+          </Button>
+          <Button size="sm" className="rounded-xl gap-2 shadow-lg shadow-primary/20" onClick={() => window.open(`https://${storeUrl}`, '_blank')}>
+            <ExternalLink className="w-4 h-4" />Voir la boutique
           </Button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {stores.map(store => (
-            <Card
-              key={store.id}
-              className="border-border shadow-sm hover:shadow-md transition-all duration-200 group overflow-hidden"
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                    <Store className="w-6 h-6 text-primary" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border',
-                        store.status === 'active'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800'
-                          : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400',
-                      )}
-                    >
-                      {store.status === 'active' ? 'Active' : 'Inactive'}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="w-7 h-7 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setDeleteId(store.id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-                <CardTitle className="text-base font-black leading-tight">{store.name}</CardTitle>
-                {store.description && (
-                  <CardDescription className="text-xs mt-1 line-clamp-2">
-                    {store.description}
-                  </CardDescription>
-                )}
-              </CardHeader>
+      </div>
 
-              <CardContent className="space-y-3 pt-0">
-                {/* URL bar */}
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-muted/50 border border-border">
-                  <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-xs text-muted-foreground font-mono truncate flex-1">
-                    shop.orbis.fr/{store.slug}
-                  </span>
-                  <button
-                    onClick={() => copyUrl(store)}
-                    className="shrink-0 p-1 rounded-md hover:bg-muted transition-colors"
-                    title="Copier l'URL"
-                  >
-                    {copiedId === store.id ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 rounded-xl text-xs gap-1.5 h-8"
-                    onClick={() => openStore(store)}
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Voir
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 rounded-xl text-xs gap-1.5 h-8"
-                    disabled
-                  >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    Configurer
-                  </Button>
-                </div>
-
-                {/* Currency badge */}
-                {store.currency && (
-                  <p className="text-[10px] text-muted-foreground font-mono">
-                    Devise : {store.currency}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Create Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={v => !v && setDialogOpen(false)}>
-        <DialogContent className="max-w-md rounded-2xl p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-0">
-            <DialogTitle className="font-black text-lg">Nouvelle boutique</DialogTitle>
-            <DialogDescription>
-              Créez une boutique en ligne pour vendre vos produits
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-6 py-5 space-y-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Nom <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                placeholder="Ma Boutique"
-                value={form.name}
-                onChange={e =>
-                  setForm(f => ({
-                    ...f,
-                    name: e.target.value,
-                    slug: e.target.value
-                      .toLowerCase()
-                      .normalize('NFD')
-                      .replace(/[\u0300-\u036f]/g, '')
-                      .replace(/[^a-z0-9]+/g, '-')
-                      .replace(/^-|-$/g, ''),
-                  }))
-                }
-                className="rounded-xl"
-              />
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Visites ce mois', value: '0', sub: 'Données disponibles prochainement', icon: Eye, color: 'bg-primary/10 text-primary' },
+          { label: 'Conversions', value: '0%', sub: 'Aucune visite enregistrée', icon: TrendingUp, color: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400' },
+          { label: 'Panier moyen', value: '—', sub: 'Aucune commande', icon: ShoppingBag, color: 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' },
+        ].map((stat, i) => (
+          <div key={i} className="metric-card flex items-start gap-4">
+            <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0', stat.color)}>
+              <stat.icon className="w-5 h-5" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Slug URL
-              </Label>
-              <div className="flex items-center gap-0 border border-input rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
-                <span className="px-3 py-2.5 bg-muted text-xs text-muted-foreground font-mono border-r border-input shrink-0">
-                  shop.orbis.fr/
-                </span>
-                <input
-                  placeholder="ma-boutique"
-                  value={form.slug}
-                  onChange={e => setForm(f => ({ ...f, slug: e.target.value }))}
-                  className="flex-1 px-3 py-2.5 bg-transparent text-sm font-mono outline-none"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-                Description
-              </Label>
-              <Input
-                placeholder="Description de votre boutique..."
-                value={form.description}
-                onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                className="rounded-xl"
-              />
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">{stat.label}</p>
+              <p className="text-2xl font-black tracking-tight leading-none">{stat.value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{stat.sub}</p>
             </div>
           </div>
-          <DialogFooter className="px-6 pb-6 pt-0 gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setDialogOpen(false)}
-              className="rounded-xl"
-            >
-              Annuler
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={saving || !form.name.trim()}
-              className="rounded-xl min-w-[120px]"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Créer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        ))}
+      </div>
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
-        <AlertDialogContent className="rounded-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Supprimer cette boutique ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Cette action est irréversible. La boutique et ses paramètres seront définitivement supprimés.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="rounded-xl bg-destructive hover:bg-destructive/90"
-            >
-              Supprimer
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Store info + controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Info card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Store className="w-5 h-5 text-primary" />
+                  {store.name}
+                </CardTitle>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <Badge className={cn('border-0 text-xs',
+                    store.status === 'active'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400')}>
+                    {store.status === 'active' ? 'Active' : 'Inactive'}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">{themeLabel}</Badge>
+                </div>
+              </div>
+              <Sheet open={editOpen} onOpenChange={setEditOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-1.5" onClick={openEdit}>
+                    <Edit2 className="w-4 h-4" />Modifier
+                  </Button>
+                </SheetTrigger>
+                <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+                  <SheetHeader><SheetTitle>Paramètres de la boutique</SheetTitle></SheetHeader>
+                  <form onSubmit={handleEdit} className="mt-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <Label>Nom *</Label>
+                      <Input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Slug</Label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground whitespace-nowrap">orbis.fr/</span>
+                        <Input value={editForm.slug} onChange={e => setEditForm(p => ({ ...p, slug: slugify(e.target.value) }))} />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Description</Label>
+                      <Textarea rows={2} value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Thème</Label>
+                      <Select value={editForm.theme} onValueChange={v => setEditForm(p => ({ ...p, theme: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {THEMES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Separator />
+                    <div className="flex gap-3 justify-end">
+                      <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Annuler</Button>
+                      <Button type="submit" disabled={saving} className="gap-2">
+                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Enregistrer
+                      </Button>
+                    </div>
+                  </form>
+                </SheetContent>
+              </Sheet>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {store.description && (
+              <p className="text-sm text-muted-foreground">{store.description}</p>
+            )}
+            <div className="flex items-center gap-2 p-2.5 bg-muted/50 rounded-lg">
+              <Link2 className="w-4 h-4 text-muted-foreground shrink-0" />
+              <span className="text-xs font-mono text-muted-foreground truncate">{storeUrl}</span>
+              <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto shrink-0"
+                onClick={() => { navigator.clipboard.writeText(`https://${storeUrl}`); toast.success('URL copiée'); }}>
+                <ExternalLink className="w-3 h-3" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Settings card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Settings className="w-5 h-5 text-primary" />Paramètres
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Enable/disable */}
+            <div className="flex items-center justify-between py-2 border-b border-border">
+              <div>
+                <p className="text-sm font-semibold">Boutique en ligne</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Rendre la boutique accessible au public</p>
+              </div>
+              <Switch checked={store.status === 'active'} onCheckedChange={toggleStatus} disabled={toggling} />
+            </div>
+
+            {/* SEO */}
+            <div className="flex items-center justify-between py-2 border-b border-border">
+              <div>
+                <p className="text-sm font-semibold">SEO & Référencement</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Titre, description, balises meta</p>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs" onClick={() => toast.info('Section SEO disponible prochainement')}>
+                Configurer
+              </Button>
+            </div>
+
+            {/* Theme */}
+            <div className="flex items-center justify-between py-2 border-b border-border">
+              <div>
+                <p className="text-sm font-semibold">Thème actuel</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{themeLabel}</p>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs gap-1.5" onClick={openEdit}>
+                <Palette className="w-3.5 h-3.5" />Changer
+              </Button>
+            </div>
+
+            {/* Custom domain */}
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  Domaine personnalisé
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-bold">PRO</Badge>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">Utilisez votre propre domaine</p>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground cursor-not-allowed" disabled>
+                Fonctionnalité Pro
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
-};
+}

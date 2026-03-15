@@ -23,6 +23,9 @@ import { InvoicesPage } from './pages/invoicing/InvoicesPage';
 
 // ─── Accounting ────────────────────────────────────────────────────────────────
 import { AccountingPage } from './pages/accounting/AccountingPage';
+import { ExpensesPage } from './pages/accounting/ExpensesPage';
+import { VATPage } from './pages/accounting/VATPage';
+import { AccountingOverviewPage } from './pages/accounting/AccountingOverviewPage';
 
 // ─── E-commerce ────────────────────────────────────────────────────────────────
 import { EcommercePage } from './pages/ecommerce/EcommercePage';
@@ -147,9 +150,9 @@ function App() {
         <Route path="/dashboard/invoicing/credits" element={<AuthGate><DW><InvoicingPage /></DW></AuthGate>} />
 
         {/* Accounting */}
-        <Route path="/dashboard/accounting" element={<AuthGate><DW><AccountingPage /></DW></AuthGate>} />
-        <Route path="/dashboard/accounting/expenses" element={<AuthGate><DW><AccountingPage /></DW></AuthGate>} />
-        <Route path="/dashboard/accounting/vat" element={<AuthGate><DW><AccountingPage /></DW></AuthGate>} />
+        <Route path="/dashboard/accounting" element={<AuthGate><DW><AccountingOverviewPage /></DW></AuthGate>} />
+        <Route path="/dashboard/accounting/expenses" element={<AuthGate><DW><ExpensesPage /></DW></AuthGate>} />
+        <Route path="/dashboard/accounting/vat" element={<AuthGate><DW><VATPage /></DW></AuthGate>} />
         <Route path="/dashboard/accounting/reports" element={<AuthGate><DW><AccountingPage /></DW></AuthGate>} />
 
         {/* E-commerce */}
