@@ -14,20 +14,14 @@ import {
   Building2, Upload, CheckCircle2, ShieldCheck, ArrowRight,
   ChevronRight, Zap,
 } from 'lucide-react';
-import { blink } from '@/lib/blink';
+import { localAuth } from '@/lib/localAuth';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// ─── Step labels ──────────────────────────────────────────────────────────────
-
-const STEP_LABELS = [
-  "Identité",
-  "Documents",
-  "Activation",
-];
+const STEP_LABELS = ['Identité', 'Documents', 'Activation'];
 
 const LEGAL_STATUS_OPTIONS = [
   { value: 'SAS', label: 'SAS — Société par actions simplifiée' },
@@ -37,8 +31,6 @@ const LEGAL_STATUS_OPTIONS = [
   { value: 'Auto-entrepreneur', label: 'Auto-entrepreneur / Micro-entreprise' },
   { value: 'Autre', label: 'Autre forme juridique' },
 ];
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export const OnboardingPage = () => {
   const { user } = useAuth();
@@ -55,8 +47,6 @@ export const OnboardingPage = () => {
     address: '',
     legalStatus: 'SAS',
   });
-
-  // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const handleCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,17 +65,9 @@ export const OnboardingPage = () => {
     setStep(2);
   };
 
-  const handleSkipDocuments = () => {
-    setStep(3);
-  };
-
-  const handleDocumentsNext = () => {
-    setStep(3);
-  };
-
   const handleFinalSubmit = async () => {
     if (!termsAccepted) {
-      toast.error('Veuillez accepter les conditions générales d\'utilisation.');
+      toast.error("Veuillez accepter les conditions générales d'utilisation.");
       return;
     }
 
@@ -93,8 +75,7 @@ export const OnboardingPage = () => {
     try {
       const companyId = `comp_${Math.random().toString(36).substr(2, 9)}`;
 
-      // ── 1. Create company record (used by useCompany hook via userRoles) ──
-      await blink.db.companies.create({
+      await localAuth.db.companies.create({
         id: companyId,
         userId: user!.id,
         name: formData.companyName,
@@ -104,54 +85,28 @@ export const OnboardingPage = () => {
         isVerified: '0',
       });
 
-      // ── 2. Assign admin role (required by useCompany to find the company) ──
-      await blink.db.userRoles.create({
+      await localAuth.db.userRoles.create({
         id: `role_${Math.random().toString(36).substr(2, 9)}`,
         userId: user!.id,
         companyId: companyId,
         role: 'admin',
       });
 
-      // ── 3. Also create organizations record (new system) ──────────────────
-      const orgId = `org_${Math.random().toString(36).substr(2, 9)}`;
-      await blink.db.organizations.create({
-        id: orgId,
-        userId: user!.id,
-        name: formData.companyName,
-        siret: formData.siret,
-        legalStatus: formData.legalStatus,
-        address: formData.address,
-        country: 'France',
-      });
-
-      // ── 4. Create membership record (owner role) ──────────────────────────
-      await blink.db.memberships.create({
-        id: `mem_${Math.random().toString(36).substr(2, 9)}`,
-        organizationId: orgId,
-        userId: user!.id,
-        role: 'owner',
-        status: 'active',
-      });
-
-      // ── 5. Refresh company context & navigate ─────────────────────────────
       await refreshCompany();
       toast.success('Bienvenue sur ORBiS ! Votre espace est prêt.');
       navigate('/dashboard');
-    } catch (error) {
-      toast.error('Une erreur est survenue lors de la création de votre entreprise. Veuillez réessayer.');
+    } catch {
+      toast.error('Une erreur est survenue. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
   };
-
-  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div
       className="min-h-screen flex items-center justify-center p-6"
       style={{ background: 'linear-gradient(160deg, #07071f 0%, #0d0d2e 50%, #0a0a24 100%)' }}
     >
-      {/* Background decoration */}
       <div
         className="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] pointer-events-none"
         style={{
@@ -161,7 +116,6 @@ export const OnboardingPage = () => {
       />
 
       <div className="max-w-lg w-full relative">
-        {/* ── Brand Header ── */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-xl shadow-indigo-500/30">
             <Zap className="w-5 h-5 text-white" />
@@ -179,16 +133,13 @@ export const OnboardingPage = () => {
           </span>
         </div>
 
-        {/* ── Step progress ── */}
+        {/* Step progress */}
         <div className="relative mb-10">
-          {/* Track */}
           <div className="absolute top-5 left-0 right-0 h-0.5 bg-white/10" />
-          {/* Fill */}
           <div
             className="absolute top-5 left-0 h-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500 ease-out"
             style={{ width: step === 1 ? '0%' : step === 2 ? '50%' : '100%' }}
           />
-
           <div className="relative flex justify-between items-start">
             {[1, 2, 3].map((s) => (
               <div key={s} className="flex flex-col items-center gap-2">
@@ -217,7 +168,7 @@ export const OnboardingPage = () => {
           </div>
         </div>
 
-        {/* ── Step 1: Company identity ── */}
+        {/* Step 1 */}
         {step === 1 && (
           <Card className="border border-white/10 bg-[#0d0d2e]/80 backdrop-blur-xl shadow-2xl shadow-black/40">
             <CardHeader className="text-center pb-4">
@@ -233,7 +184,6 @@ export const OnboardingPage = () => {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleCompanySubmit} className="space-y-5">
-                {/* Company name */}
                 <div className="space-y-2">
                   <Label htmlFor="companyName" className="font-semibold text-indigo-200/80 text-sm">
                     Nom de l'entreprise <span className="text-indigo-400">*</span>
@@ -248,7 +198,6 @@ export const OnboardingPage = () => {
                   />
                 </div>
 
-                {/* Legal status */}
                 <div className="space-y-2">
                   <Label htmlFor="legalStatus" className="font-semibold text-indigo-200/80 text-sm">
                     Forme juridique <span className="text-indigo-400">*</span>
@@ -274,7 +223,6 @@ export const OnboardingPage = () => {
                   </Select>
                 </div>
 
-                {/* SIRET */}
                 <div className="space-y-2">
                   <Label htmlFor="siret" className="font-semibold text-indigo-200/80 text-sm">
                     Numéro SIRET <span className="text-indigo-400">*</span>
@@ -291,11 +239,10 @@ export const OnboardingPage = () => {
                     className="h-11 rounded-xl bg-white/5 border-white/10 text-white placeholder:text-white/25 focus:border-indigo-500/60 focus:ring-indigo-500/20 font-mono tracking-wider"
                   />
                   <p className="text-xs text-indigo-400/40">
-                    {formData.siret.length}/14 chiffres · Requis pour la vérification KYB
+                    {formData.siret.length}/14 chiffres
                   </p>
                 </div>
 
-                {/* Address */}
                 <div className="space-y-2">
                   <Label htmlFor="address" className="font-semibold text-indigo-200/80 text-sm">
                     Adresse du siège social <span className="text-indigo-400">*</span>
@@ -322,7 +269,7 @@ export const OnboardingPage = () => {
           </Card>
         )}
 
-        {/* ── Step 2: Legal documents (optional) ── */}
+        {/* Step 2 */}
         {step === 2 && (
           <Card className="border border-white/10 bg-[#0d0d2e]/80 backdrop-blur-xl shadow-2xl shadow-black/40">
             <CardHeader className="text-center pb-4">
@@ -333,41 +280,26 @@ export const OnboardingPage = () => {
                 Documents Légaux
               </CardTitle>
               <CardDescription className="text-indigo-300/50">
-                Facultatif — vous pouvez les ajouter plus tard dans vos paramètres.
+                Facultatif — vous pouvez les ajouter plus tard.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {/* Kbis upload zone */}
               <div className="p-5 rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center gap-2 hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-all cursor-pointer group">
-                <div className="w-10 h-10 rounded-xl bg-white/5 group-hover:bg-indigo-500/15 flex items-center justify-center transition-colors">
-                  <Upload className="w-5 h-5 text-white/30 group-hover:text-indigo-400 transition-colors" />
-                </div>
-                <p className="text-sm font-bold text-white/60 group-hover:text-indigo-200 transition-colors">
-                  KBIS (Moins de 3 mois)
-                </p>
+                <Upload className="w-5 h-5 text-white/30 group-hover:text-indigo-400 transition-colors" />
+                <p className="text-sm font-bold text-white/60 group-hover:text-indigo-200 transition-colors">KBIS (Moins de 3 mois)</p>
                 <p className="text-xs text-white/25">PDF, JPG ou PNG · Max 10 Mo</p>
               </div>
-
-              {/* ID upload zone */}
               <div className="p-5 rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center gap-2 hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-all cursor-pointer group">
-                <div className="w-10 h-10 rounded-xl bg-white/5 group-hover:bg-indigo-500/15 flex items-center justify-center transition-colors">
-                  <Upload className="w-5 h-5 text-white/30 group-hover:text-indigo-400 transition-colors" />
-                </div>
-                <p className="text-sm font-bold text-white/60 group-hover:text-indigo-200 transition-colors">
-                  Pièce d'identité du gérant
-                </p>
+                <Upload className="w-5 h-5 text-white/30 group-hover:text-indigo-400 transition-colors" />
+                <p className="text-sm font-bold text-white/60 group-hover:text-indigo-200 transition-colors">Pièce d'identité du gérant</p>
                 <p className="text-xs text-white/25">Recto/Verso obligatoire</p>
               </div>
-
-              {/* Notice */}
               <div className="flex items-start gap-3 p-3 rounded-xl bg-indigo-500/8 border border-indigo-500/15">
                 <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-indigo-300/60">
-                  Ces documents sont nécessaires pour la vérification KYB réglementaire. Vous pouvez les soumettre après création de votre compte.
+                  Ces documents sont nécessaires pour la vérification KYB. Vous pouvez les soumettre après création de votre compte.
                 </p>
               </div>
-
-              {/* Actions */}
               <div className="flex gap-3 pt-1">
                 <Button
                   variant="outline"
@@ -377,17 +309,15 @@ export const OnboardingPage = () => {
                   Retour
                 </Button>
                 <Button
-                  onClick={handleDocumentsNext}
+                  onClick={() => setStep(3)}
                   className="flex-[2] h-11 rounded-xl font-bold bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 border-0 text-white shadow-lg shadow-indigo-500/25"
                 >
-                  Valider les documents
+                  Continuer
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               </div>
-
-              {/* Skip button */}
               <button
-                onClick={handleSkipDocuments}
+                onClick={() => setStep(3)}
                 className="w-full text-center text-xs text-indigo-400/50 hover:text-indigo-300/70 transition-colors py-1 underline underline-offset-2"
               >
                 Passer cette étape — ajouter plus tard
@@ -396,7 +326,7 @@ export const OnboardingPage = () => {
           </Card>
         )}
 
-        {/* ── Step 3: Compliance & activation ── */}
+        {/* Step 3 */}
         {step === 3 && (
           <Card className="border border-white/10 bg-[#0d0d2e]/80 backdrop-blur-xl shadow-2xl shadow-black/40">
             <CardHeader className="text-center pb-4">
@@ -411,11 +341,8 @@ export const OnboardingPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Summary */}
               <div className="p-4 rounded-2xl bg-white/4 border border-white/8 space-y-2">
-                <p className="text-xs font-bold uppercase tracking-wider text-indigo-400/60 mb-3">
-                  Récapitulatif
-                </p>
+                <p className="text-xs font-bold uppercase tracking-wider text-indigo-400/60 mb-3">Récapitulatif</p>
                 <div className="flex justify-between text-sm">
                   <span className="text-indigo-300/50">Entreprise</span>
                   <span className="text-white font-semibold">{formData.companyName}</span>
@@ -430,16 +357,13 @@ export const OnboardingPage = () => {
                 </div>
               </div>
 
-              {/* KYB notice */}
               <div className="flex items-start gap-3 p-4 rounded-2xl bg-indigo-500/8 border border-indigo-500/15">
                 <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                 <p className="text-sm text-indigo-200/60">
-                  En validant, vous certifiez l'exactitude des informations fournies
-                  conformément à la réglementation KYB européenne.
+                  En validant, vous certifiez l'exactitude des informations fournies conformément à la réglementation KYB européenne.
                 </p>
               </div>
 
-              {/* Terms checkbox */}
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
@@ -460,7 +384,6 @@ export const OnboardingPage = () => {
                 </label>
               </div>
 
-              {/* Back + Submit */}
               <div className="flex gap-3">
                 <Button
                   variant="outline"
@@ -491,7 +414,6 @@ export const OnboardingPage = () => {
           </Card>
         )}
 
-        {/* ── Footer note ── */}
         <p className="text-center text-xs text-indigo-400/30 mt-6">
           Vos données sont hébergées en France · Chiffrement TLS · RGPD natif
         </p>

@@ -7,8 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Settings, Building2, Bell, Shield, Palette, Save, User, Mail, Phone, Globe, CheckCircle2, Share2, Eye, Network } from 'lucide-react';
-import { blink } from '@/lib/blink';
+import { Settings, Building2, Bell, Save, User, CheckCircle2, Share2, Network } from 'lucide-react';
+import { localAuth } from '@/lib/localAuth';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
 import { toast } from 'sonner';
@@ -30,12 +30,11 @@ export const SettingsPage = () => {
 
   useEffect(() => {
     if (user) {
-      setProfileForm({ displayName: (user as any).displayName || '', email: user.email || '', phone: (user as any).phone || '' });
+      setProfileForm({ displayName: user.displayName || '', email: user.email || '', phone: user.phone || '' });
     }
     if (company) {
       setCompanyForm({ name: company.name || '', siret: company.siret || '', address: company.address || '', legalStatus: company.legalStatus || 'SAS' });
-      // Fetch public listing
-      blink.db.publicBusinessListing.list({ where: { companyId: company.id }, limit: 1 })
+      localAuth.db.publicBusinessListing.list({ where: { companyId: company.id }, limit: 1 })
         .then((rows: any[]) => {
           const res = rows[0];
           if (res) {
@@ -44,7 +43,7 @@ export const SettingsPage = () => {
               businessType: res.businessType || 'software',
               description: res.description || '',
               servicesOffered: res.servicesOffered || '',
-              isPublic: Number(res.isPublic) === 1
+              isPublic: Number(res.isPublic) === 1,
             });
           }
         })
@@ -55,7 +54,7 @@ export const SettingsPage = () => {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await blink.auth.updateMe({ displayName: profileForm.displayName });
+      await localAuth.auth.updateMe({ displayName: profileForm.displayName, phone: profileForm.phone });
       toast.success('Profil mis à jour');
     } catch { toast.error('Erreur'); } finally { setSaving(false); }
   };
@@ -64,8 +63,8 @@ export const SettingsPage = () => {
     if (!company) return;
     setSaving(true);
     try {
-      await blink.db.companies.update(company.id, {
-        name: companyForm.name, address: companyForm.address, legalStatus: companyForm.legalStatus
+      await localAuth.db.companies.update(company.id, {
+        name: companyForm.name, address: companyForm.address, legalStatus: companyForm.legalStatus,
       });
       await refreshCompany();
       toast.success('Informations société mises à jour');
@@ -76,13 +75,13 @@ export const SettingsPage = () => {
     if (!company) return;
     setSaving(true);
     try {
-      await blink.db.publicBusinessListing.upsert({
+      await localAuth.db.publicBusinessListing.upsert({
         id: listing?.id || `pub_${Date.now()}`,
         companyId: company.id,
         businessType: publicForm.businessType,
         description: publicForm.description,
         servicesOffered: publicForm.servicesOffered,
-        isPublic: publicForm.isPublic ? "1" : "0"
+        isPublic: publicForm.isPublic ? '1' : '0',
       });
       toast.success('Profil B2B mis à jour');
     } catch { toast.error('Erreur'); } finally { setSaving(false); }
@@ -123,19 +122,33 @@ export const SettingsPage = () => {
             <CardContent className="space-y-6">
               <div className="flex items-center gap-6">
                 <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-black text-3xl border-4 border-primary/20">
-                  {((user as any)?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
+                  {(user?.displayName || user?.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-black text-lg">{(user as any)?.displayName || 'Utilisateur'}</p>
+                  <p className="font-black text-lg">{user?.displayName || 'Utilisateur'}</p>
                   <p className="text-muted-foreground text-sm">{user?.email}</p>
-                  {user?.email && <div className="flex items-center gap-1 mt-1"><CheckCircle2 className="w-3 h-3 text-emerald-500" /><span className="text-xs text-emerald-500 font-bold">Email vérifié</span></div>}
+                  {user?.email && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      <span className="text-xs text-emerald-500 font-bold">Email vérifié</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <Separator />
               <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1"><Label className="font-bold">Nom d'affichage</Label><Input value={profileForm.displayName} onChange={e => setProfileForm({ ...profileForm, displayName: e.target.value })} className="rounded-xl" placeholder="Votre nom" /></div>
-                <div className="space-y-1"><Label className="font-bold">Email</Label><Input value={profileForm.email} disabled className="rounded-xl bg-muted/50" /></div>
-                <div className="space-y-1"><Label className="font-bold">Téléphone</Label><Input value={profileForm.phone} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} className="rounded-xl" placeholder="+33 6 00 00 00 00" /></div>
+                <div className="space-y-1">
+                  <Label className="font-bold">Nom d'affichage</Label>
+                  <Input value={profileForm.displayName} onChange={e => setProfileForm({ ...profileForm, displayName: e.target.value })} className="rounded-xl" placeholder="Votre nom" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold">Email</Label>
+                  <Input value={profileForm.email} disabled className="rounded-xl bg-muted/50" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold">Téléphone</Label>
+                  <Input value={profileForm.phone} onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })} className="rounded-xl" placeholder="+33 6 00 00 00 00" />
+                </div>
               </div>
               <Button onClick={saveProfile} disabled={saving} className="rounded-xl font-bold">
                 <Save className="w-4 h-4 mr-2" /> {saving ? 'Sauvegarde...' : 'Sauvegarder'}
@@ -162,8 +175,14 @@ export const SettingsPage = () => {
                 </div>
               )}
               <div className="grid sm:grid-cols-2 gap-4">
-                <div className="space-y-1 sm:col-span-2"><Label className="font-bold">Raison sociale</Label><Input value={companyForm.name} onChange={e => setCompanyForm({ ...companyForm, name: e.target.value })} className="rounded-xl" /></div>
-                <div className="space-y-1"><Label className="font-bold">SIRET</Label><Input value={companyForm.siret} disabled className="rounded-xl bg-muted/50" /></div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="font-bold">Raison sociale</Label>
+                  <Input value={companyForm.name} onChange={e => setCompanyForm({ ...companyForm, name: e.target.value })} className="rounded-xl" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-bold">SIRET</Label>
+                  <Input value={companyForm.siret} disabled className="rounded-xl bg-muted/50" />
+                </div>
                 <div className="space-y-1">
                   <Label className="font-bold">Forme juridique</Label>
                   <Select value={companyForm.legalStatus} onValueChange={v => setCompanyForm({ ...companyForm, legalStatus: v })}>
@@ -173,7 +192,10 @@ export const SettingsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1 sm:col-span-2"><Label className="font-bold">Adresse du siège</Label><Input value={companyForm.address} onChange={e => setCompanyForm({ ...companyForm, address: e.target.value })} className="rounded-xl" /></div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="font-bold">Adresse du siège</Label>
+                  <Input value={companyForm.address} onChange={e => setCompanyForm({ ...companyForm, address: e.target.value })} className="rounded-xl" />
+                </div>
               </div>
               <Button onClick={saveCompany} disabled={saving} className="rounded-xl font-bold">
                 <Save className="w-4 h-4 mr-2" /> {saving ? 'Sauvegarde...' : 'Sauvegarder'}
@@ -194,22 +216,18 @@ export const SettingsPage = () => {
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between p-4 rounded-2xl bg-blue-50 border border-blue-100">
                 <div className="flex items-center gap-3">
-                  <div className={cn("w-3 h-3 rounded-full", publicForm.isPublic ? "bg-emerald-500 animate-pulse" : "bg-slate-300")} />
+                  <div className={cn('w-3 h-3 rounded-full', publicForm.isPublic ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300')} />
                   <div>
                     <p className="text-sm font-black uppercase text-blue-600 tracking-widest">Visibilité Publique</p>
-                    <p className="text-xs text-slate-500 font-bold">Votre entreprise est {publicForm.isPublic ? "visible" : "masquée"} dans le catalogue B2B.</p>
+                    <p className="text-xs text-slate-500 font-bold">Votre entreprise est {publicForm.isPublic ? 'visible' : 'masquée'} dans le catalogue B2B.</p>
                   </div>
                 </div>
-                <Switch
-                  checked={publicForm.isPublic}
-                  onCheckedChange={v => setPublicForm({...publicForm, isPublic: v})}
-                />
+                <Switch checked={publicForm.isPublic} onCheckedChange={v => setPublicForm({ ...publicForm, isPublic: v })} />
               </div>
-
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="font-bold">Type d'activité</Label>
-                  <Select value={publicForm.businessType} onValueChange={v => setPublicForm({...publicForm, businessType: v})}>
+                  <Select value={publicForm.businessType} onValueChange={v => setPublicForm({ ...publicForm, businessType: v })}>
                     <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="restaurant">Restaurant / Food</SelectItem>
@@ -222,21 +240,11 @@ export const SettingsPage = () => {
                 </div>
                 <div className="space-y-1">
                   <Label className="font-bold">Services principaux</Label>
-                  <Input
-                    value={publicForm.servicesOffered}
-                    onChange={e => setPublicForm({...publicForm, servicesOffered: e.target.value})}
-                    className="rounded-xl"
-                    placeholder="Ex: Livraison urbaine, Conseil marketing..."
-                  />
+                  <Input value={publicForm.servicesOffered} onChange={e => setPublicForm({ ...publicForm, servicesOffered: e.target.value })} className="rounded-xl" placeholder="Ex: Livraison urbaine, Conseil marketing..." />
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <Label className="font-bold">Description publique</Label>
-                  <Textarea
-                    value={publicForm.description}
-                    onChange={e => setPublicForm({...publicForm, description: e.target.value})}
-                    className="rounded-xl min-h-[100px] resize-none"
-                    placeholder="Décrivez votre métier pour vos futurs partenaires..."
-                  />
+                  <Textarea value={publicForm.description} onChange={e => setPublicForm({ ...publicForm, description: e.target.value })} className="rounded-xl min-h-[100px] resize-none" placeholder="Décrivez votre métier pour vos futurs partenaires..." />
                 </div>
               </div>
               <Button onClick={savePublicProfile} disabled={saving} className="rounded-xl font-bold bg-slate-900 hover:bg-black text-white px-8">
@@ -257,9 +265,8 @@ export const SettingsPage = () => {
               <div className="space-y-4">
                 <h3 className="font-bold text-sm uppercase tracking-wider text-muted-foreground">Email</h3>
                 {[
-                  { key: 'emailNewClient', label: 'Nouveau client ajouté', desc: 'Recevez une notification à chaque nouveau client' },
-                  { key: 'emailNewInvoice', label: 'Nouvelle facture', desc: 'À la création de chaque document' },
-                  { key: 'emailPayment', label: 'Paiement reçu', desc: 'Notification lors de chaque encaissement' },
+                  { key: 'newPayment', label: 'Paiement reçu', desc: 'Notification lors de chaque encaissement' },
+                  { key: 'newOrder', label: 'Nouvelle commande', desc: 'À la réception de chaque commande' },
                   { key: 'weeklyReport', label: 'Rapport hebdomadaire', desc: 'Synthèse de la semaine chaque lundi' },
                   { key: 'monthlyReport', label: 'Rapport mensuel', desc: 'Bilan mensuel complet de votre activité' },
                 ].map(notif => (

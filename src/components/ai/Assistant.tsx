@@ -3,12 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Bot, Send, X, Sparkles, Workflow, Target, BarChart3,
-  User, CheckCircle2, AlertCircle, Loader2, Plus, 
-  FileText, Users, Receipt, Landmark
+import {
+  Bot, Send, X, BarChart3,
+  User, CheckCircle2, Plus,
+  FileText, Users, Receipt,
 } from 'lucide-react';
-import { blink } from '@/lib/blink';
+import { localAuth } from '@/lib/localAuth';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
@@ -27,11 +27,70 @@ interface Message {
   action?: MessageAction;
 }
 
-export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) => {
+const DEMO_RESPONSES: Record<string, string> = {
+  default: "Je suis votre assistant ORBiS. Je peux créer des clients, des factures ou des dépenses. Essayez par exemple : \"Crée un client Tech Solutions\" ou \"Fais une facture de 1500€\".",
+  analyse: "📊 **Analyse financière de votre entreprise**\n\nChiffre d'affaires ce mois : **12 450 €**\nDépenses : **3 820 €**\nMarge nette : **8 630 €** (+12% vs mois dernier)\n\n✅ Santé financière : Bonne\n⚠️ Point d'attention : 3 factures en attente de paiement (4 200 €)",
+  bilan: "📈 **Bilan financier**\n\nActif total : **45 200 €**\nPassif : **12 800 €**\nCapitaux propres : **32 400 €**\n\nRatio de liquidité : 1.8 (sain)\nRentabilité nette : 21%",
+};
+
+function getSimpleResponse(text: string): { hasAction: boolean; actionType?: string; data?: any; response: string } {
+  const lower = text.toLowerCase();
+
+  if (lower.includes('client') && (lower.includes('créer') || lower.includes('crée') || lower.includes('nouveau') || lower.includes('ajoute'))) {
+    const nameMatch = text.match(/['"]([^'"]+)['"]/);
+    const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+    const name = nameMatch?.[1] || 'Nouveau Client';
+    const email = emailMatch?.[0] || `contact@${name.toLowerCase().replace(/\s+/g, '')}.com`;
+    return {
+      hasAction: true,
+      actionType: 'create_client',
+      data: { name, email },
+      response: `J'ai préparé la création du client **${name}** (${email}). Confirmez-vous ?`,
+    };
+  }
+
+  if (lower.includes('facture') && (lower.includes('créer') || lower.includes('crée') || lower.includes('faire') || lower.includes('fais'))) {
+    const amountMatch = text.match(/(\d+[\s]?[€]?[\s]?(?:euros?)?)/i);
+    const clientMatch = text.match(/(?:pour|client)\s+['"]?([A-Za-zÀ-ÿ\s]+?)['"]?(?:\s|$)/i);
+    const amount = amountMatch?.[1]?.replace(/[^0-9]/g, '') || '1000';
+    const clientName = clientMatch?.[1]?.trim() || 'Client';
+    return {
+      hasAction: true,
+      actionType: 'create_invoice',
+      data: { clientName, amount },
+      response: `J'ai préparé une facture de **${amount} €** pour **${clientName}**. Confirmez-vous ?`,
+    };
+  }
+
+  if (lower.includes('dépense') && (lower.includes('créer') || lower.includes('crée') || lower.includes('enregistre') || lower.includes('ajoute'))) {
+    const amountMatch = text.match(/(\d+)/);
+    const titleMatch = text.match(/['"]([^'"]+)['"]/);
+    const amount = amountMatch?.[1] || '50';
+    const title = titleMatch?.[1] || 'Dépense professionnelle';
+    return {
+      hasAction: true,
+      actionType: 'create_expense',
+      data: { title, amount, category: 'divers' },
+      response: `J'ai préparé la dépense **${title}** de **${amount} €**. Confirmez-vous ?`,
+    };
+  }
+
+  if (lower.includes('analys') || lower.includes('rentabilit') || lower.includes('trimestre')) {
+    return { hasAction: false, response: DEMO_RESPONSES.analyse };
+  }
+
+  if (lower.includes('bilan')) {
+    return { hasAction: false, response: DEMO_RESPONSES.bilan };
+  }
+
+  return { hasAction: false, response: DEMO_RESPONSES.default };
+}
+
+export const Assistant = ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) => {
   const { user } = useAuth();
   const { company } = useCompany();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Bonjour ! Je suis votre assistant ORBiS. Je peux créer des clients, des factures, des dépenses ou analyser vos données financières. Que puis-je faire pour vous ?' }
+    { role: 'assistant', content: "Bonjour ! Je suis votre assistant ORBiS. Je peux créer des clients, des factures, des dépenses ou analyser vos données. Que puis-je faire pour vous ?" },
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -39,10 +98,8 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
 
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (viewport) viewport.scrollTop = viewport.scrollHeight;
     }
   }, [messages]);
 
@@ -53,44 +110,49 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
     setLoading(true);
     try {
       if (msg.action.type === 'create_client') {
-        await blink.db.clients.create({
+        await localAuth.db.clients.create({
           id: `cli_${Date.now()}`,
-          userId: user!.id,
-          companyId: company!.id,
+          userId: user?.id,
+          companyId: company?.id,
           ...msg.action.data,
-          status: 'active'
+          status: 'active',
+          createdAt: new Date().toISOString(),
         });
-        toast.success(`Client ${msg.action.data.name} créé par l'IA`);
+        toast.success(`Client ${msg.action.data.name} créé avec succès`);
       } else if (msg.action.type === 'create_invoice') {
-        await blink.db.invoices.create({
+        await localAuth.db.invoices.create({
           id: `inv_${Date.now()}`,
-          userId: user!.id,
-          companyId: company!.id,
+          userId: user?.id,
+          companyId: company?.id,
           ...msg.action.data,
           status: 'draft',
-          number: `FAC-${Date.now().toString().slice(-4)}`
+          number: `FAC-${Date.now().toString().slice(-4)}`,
+          createdAt: new Date().toISOString(),
         });
-        toast.success(`Facture pour ${msg.action.data.clientName} créée par l'IA`);
+        toast.success(`Facture pour ${msg.action.data.clientName} créée`);
       } else if (msg.action.type === 'create_expense') {
-        await blink.db.expenses.create({
+        await localAuth.db.expenses.create({
           id: `exp_${Date.now()}`,
-          userId: user!.id,
-          companyId: company!.id,
+          userId: user?.id,
+          companyId: company?.id,
           ...msg.action.data,
           date: new Date().toISOString().split('T')[0],
-          status: 'pending'
+          status: 'pending',
         });
-        toast.success(`Dépense de ${msg.action.data.amount}€ enregistrée`);
+        toast.success(`Dépense de ${msg.action.data.amount} € enregistrée`);
       }
 
-      setMessages(prev => {
+      setMessages((prev) => {
         const next = [...prev];
-        next[msgIndex].action!.status = 'completed';
-        next[msgIndex].content += "\n\n✅ Action effectuée avec succès !";
+        next[msgIndex] = {
+          ...next[msgIndex],
+          action: { ...next[msgIndex].action!, status: 'completed' },
+          content: next[msgIndex].content + '\n\n✅ Action effectuée avec succès !',
+        };
         return next;
       });
-    } catch (e) {
-      toast.error("Erreur lors de l'exécution de l'action IA");
+    } catch {
+      toast.error("Erreur lors de l'exécution de l'action");
     } finally {
       setLoading(false);
     }
@@ -98,72 +160,29 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
-
     const userMsg = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setMessages((prev) => [...prev, { role: 'user', content: userMsg }]);
     setLoading(true);
 
-    try {
-      // 1. Check for intent using generateObject
-      const intentResult = await blink.ai.generateObject({
-        prompt: `Analyse l'intention de l'utilisateur : "${userMsg}". 
-        S'il veut créer quelque chose, extrais les données. 
-        Types supportés : create_client (name, email), create_invoice (clientName, amount), create_expense (title, amount, category).
-        Si pas d'action claire, renvoie action: null.`,
-        schema: {
-          type: 'object',
-          properties: {
-            hasAction: { type: 'boolean' },
-            actionType: { type: 'string', enum: ['create_client', 'create_invoice', 'create_expense', 'connect_business', null] },
-            data: { type: 'object' },
-            response: { type: 'string' }
-          }
-        }
-      });
+    await new Promise((r) => setTimeout(r, 600));
 
-      const { hasAction, actionType, data, response } = intentResult.object as any;
+    const result = getSimpleResponse(userMsg);
 
-      if (hasAction && actionType) {
-        if (actionType === 'analyze_finance') {
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: "Je vais analyser vos données financières immédiatement...",
-            action: { type: actionType, data: {}, status: 'pending' }
-          }]);
-          // Auto-trigger analysis for better UX
-          setTimeout(() => performAction(messages.length + 1), 500);
-        } else {
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: response || `D'accord, j'ai préparé les données pour : ${actionType}. Voulez-vous que je valide l'action ?`,
-            action: { type: actionType, data, status: 'pending' }
-          }]);
-        }
-      } else {
-        // Simple chat fallback
-        let fullResponse = '';
-        setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
-        await blink.ai.streamText({
-          messages: [
-            { role: 'system', content: 'Tu es l\'assistant IA central de FusionBiz. Tu es capable d\'aider sur la comptabilité (Indy), l\'ERP (Odoo) et l\'automatisation (n8n). Sois court et efficace.' },
-            ...messages.map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: userMsg }
-          ]
-        }, (chunk) => {
-          fullResponse += chunk;
-          setMessages(prev => {
-            const next = [...prev];
-            next[next.length - 1].content = fullResponse;
-            return next;
-          });
-        });
-      }
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Désolé, je rencontre une difficulté technique." }]);
-    } finally {
-      setLoading(false);
+    if (result.hasAction && result.actionType) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: result.response,
+          action: { type: result.actionType!, data: result.data, status: 'pending' },
+        },
+      ]);
+    } else {
+      setMessages((prev) => [...prev, { role: 'assistant', content: result.response }]);
     }
+
+    setLoading(false);
   };
 
   return (
@@ -182,7 +201,7 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                   <Bot className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-sm font-black tracking-tight uppercase">Fusion Core IA</CardTitle>
+                  <CardTitle className="text-sm font-black tracking-tight uppercase">Assistant ORBiS</CardTitle>
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span className="text-[10px] font-black uppercase tracking-widest opacity-70 text-blue-200">Mode Action Actif</span>
@@ -198,23 +217,12 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
               <ScrollArea className="flex-1 p-4" ref={scrollRef}>
                 <div className="space-y-6">
                   {messages.map((m, i) => (
-                    <div key={i} className={cn(
-                      "flex gap-3",
-                      m.role === 'user' ? "flex-row-reverse" : ""
-                    )}>
-                      <div className={cn(
-                        "w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm",
-                        m.role === 'assistant' ? "bg-slate-900 text-white" : "bg-blue-600 text-white"
-                      )}>
+                    <div key={i} className={cn('flex gap-3', m.role === 'user' ? 'flex-row-reverse' : '')}>
+                      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm', m.role === 'assistant' ? 'bg-slate-900 text-white' : 'bg-blue-600 text-white')}>
                         {m.role === 'assistant' ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
                       </div>
                       <div className="flex flex-col gap-2 max-w-[80%]">
-                        <div className={cn(
-                          "p-4 rounded-2xl text-sm leading-relaxed font-medium shadow-sm border",
-                          m.role === 'assistant' 
-                            ? "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 rounded-tl-none" 
-                            : "bg-blue-600 text-white border-blue-500 rounded-tr-none"
-                        )}>
+                        <div className={cn('p-4 rounded-2xl text-sm leading-relaxed font-medium shadow-sm border whitespace-pre-line', m.role === 'assistant' ? 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 rounded-tl-none' : 'bg-blue-600 text-white border-blue-500 rounded-tr-none')}>
                           {m.content || (
                             <div className="flex gap-1 py-1">
                               <div className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" />
@@ -223,7 +231,7 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                             </div>
                           )}
                         </div>
-                        
+
                         {m.action && m.action.status === 'pending' && (
                           <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-900/20 shadow-none overflow-hidden">
                             <CardContent className="p-3 space-y-3">
@@ -232,49 +240,64 @@ export const Assistant = ({ open, onOpenChange }: { open: boolean, onOpenChange:
                               </div>
                               <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                                 {m.action.type === 'create_client' && `Nouveau client : ${m.action.data.name}`}
-                                {m.action.type === 'create_invoice' && `Facture de ${m.action.data.amount}€ pour ${m.action.data.clientName}`}
-                                {m.action.type === 'create_expense' && `Dépense : ${m.action.data.title} (${m.action.data.amount}€)`}
-                                {m.action.type === 'analyze_finance' && "Génération d'un rapport de santé financière..."}
+                                {m.action.type === 'create_invoice' && `Facture de ${m.action.data.amount} € pour ${m.action.data.clientName}`}
+                                {m.action.type === 'create_expense' && `Dépense : ${m.action.data.title} (${m.action.data.amount} €)`}
                               </div>
-                              <Button 
-                                size="sm" 
-                                onClick={() => performAction(i)} 
+                              <Button
+                                size="sm"
+                                onClick={() => performAction(i)}
                                 disabled={loading}
                                 className="w-full h-8 rounded-lg font-black text-[10px] uppercase bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200"
                               >
-                                {m.action.type === 'analyze_finance' ? "Lancer l'analyse" : "Confirmer l'action"}
+                                Confirmer l'action
                               </Button>
                             </CardContent>
                           </Card>
                         )}
+
+                        {m.action && m.action.status === 'completed' && (
+                          <div className="flex items-center gap-1.5 text-emerald-600 text-[11px] font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Effectué
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
+                  {loading && (
+                    <div className="flex gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+                        <Bot className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-tl-none">
+                        <div className="flex gap-1 py-1">
+                          <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+                          <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                          <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
 
-              <div className="p-4 border-t border-border/50 space-y-4 bg-white dark:bg-slate-900">
+              <div className="p-4 border-t border-border/50 space-y-3 bg-white dark:bg-slate-900">
                 <div className="flex flex-wrap gap-2">
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Analyse ma rentabilité ce trimestre")}>
-                     <BarChart3 className="w-3 h-3 mr-1.5 text-blue-600" /> Analyse IA
-                   </Button>
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée un client 'Tech Solutions' avec l'email contact@tech.com")}>
-                     <Users className="w-3 h-3 mr-1.5 text-blue-600" /> Client
-                   </Button>
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée une facture de 1500€ pour le client 'Tech Solutions'")}>
-                     <Receipt className="w-3 h-3 mr-1.5 text-blue-600" /> Facture
-                   </Button>
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Enregistre une dépense de 50€ pour 'Fournitures de bureau'")}>
-                     <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Dépense
-                   </Button>
-                   <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Fais-moi un bilan financier de ma société")}>
-                     <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Bilan
-                   </Button>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput('Analyse ma rentabilité ce trimestre')}>
+                    <BarChart3 className="w-3 h-3 mr-1.5 text-blue-600" /> Analyse IA
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée un client 'Tech Solutions' avec l'email contact@tech.com")}>
+                    <Users className="w-3 h-3 mr-1.5 text-blue-600" /> Client
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Crée une facture de 1500€ pour 'Tech Solutions'")}>
+                    <Receipt className="w-3 h-3 mr-1.5 text-blue-600" /> Facture
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-8 rounded-xl text-[10px] font-black uppercase tracking-wider border-slate-200" onClick={() => setInput("Enregistre une dépense de 50€ pour 'Fournitures bureau'")}>
+                    <FileText className="w-3 h-3 mr-1.5 text-blue-600" /> Dépense
+                  </Button>
                 </div>
-                
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Posez une question ou demandez une action..." 
+                  <Input
+                    placeholder="Posez une question ou demandez une action..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSend()}

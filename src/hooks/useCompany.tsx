@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { blink } from '@/lib/blink';
+import { localAuth } from '@/lib/localAuth';
 import { useAuth } from '@/hooks/useAuth';
 
 interface Company {
@@ -33,11 +33,11 @@ export const CompanyProvider = ({ children }: { children: React.ReactNode }) => 
     }
 
     try {
-      const roles = await blink.db.userRoles.list({ where: { userId: user.id } });
+      const roles = await localAuth.db.userRoles.list({ where: { userId: user.id } });
       if (roles.length > 0) {
         const companyId = roles[0].companyId;
-        const companyData = await blink.db.companies.get(companyId);
-        setCompany(companyData as any);
+        const companyData = await localAuth.db.companies.get(companyId);
+        setCompany(companyData as Company | null);
       } else {
         setCompany(null);
       }
@@ -51,7 +51,7 @@ export const CompanyProvider = ({ children }: { children: React.ReactNode }) => 
 
   useEffect(() => {
     fetchCompany();
-  }, [user]);
+  }, [user?.id]);
 
   return (
     <CompanyContext.Provider value={{ company, loading, refreshCompany: fetchCompany }}>

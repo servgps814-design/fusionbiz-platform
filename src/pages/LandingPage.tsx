@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useInView, useScroll, useTransform, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { blink } from '@/lib/blink';
+import { localAuth, DEMO_CREDENTIALS } from '@/lib/localAuth';
 import { useAuth } from '@/hooks/useAuth';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   LayoutDashboard, Users, FileText, Receipt, Store,
   Megaphone, BarChart3, Share2, Image, Zap, Globe,
@@ -382,18 +385,41 @@ export const LandingPage = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: DEMO_CREDENTIALS.email, password: DEMO_CREDENTIALS.password });
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
   const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '20%']);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
 
-  const handleCta = () => {
+  const openLogin = () => {
     if (isAuthenticated) {
       navigate('/dashboard');
     } else {
-      blink.auth.login();
+      setLoginError('');
+      setLoginOpen(true);
     }
   };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await localAuth.auth.login(loginForm.email, loginForm.password);
+      setLoginOpen(false);
+      navigate('/onboarding');
+    } catch (err: any) {
+      setLoginError(err.message || 'Identifiants incorrects');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleCta = openLogin;
 
   return (
     <div
@@ -702,7 +728,7 @@ export const LandingPage = () => {
               </motion.div>
               <motion.div variants={fadeUp} custom={0.32} className="mt-8">
                 <Button
-                  onClick={() => blink.auth.login()}
+                  onClick={openLogin}
                   className="h-12 px-8 rounded-full font-bold bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 shadow-lg shadow-indigo-500/30 border-0 text-white transition-all duration-200 hover:scale-105 active:scale-95"
                 >
                   Commencer maintenant <ArrowRight className="w-4 h-4 ml-2" />
@@ -799,7 +825,7 @@ export const LandingPage = () => {
                 </ul>
 
                 <Button
-                  onClick={() => blink.auth.login()}
+                  onClick={openLogin}
                   className="w-full h-12 rounded-xl font-bold text-base bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 border-0 text-white shadow-lg shadow-indigo-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                 >
                   Démarrer l'essai gratuit
@@ -855,7 +881,7 @@ export const LandingPage = () => {
             </motion.p>
             <motion.div variants={fadeUp} custom={0.2} className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button
-                onClick={() => blink.auth.login()}
+                onClick={openLogin}
                 size="lg"
                 className="h-14 px-12 rounded-full font-bold text-base bg-white text-indigo-700 hover:bg-indigo-50 shadow-2xl shadow-white/20 transition-all duration-200 hover:scale-105 active:scale-95 border-0"
               >
@@ -937,6 +963,85 @@ export const LandingPage = () => {
           </div>
         </div>
       </footer>
+
+      {/* ── Login Modal ────────────────────────────────────────────────────── */}
+      <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl border border-white/10 p-0 overflow-hidden" style={{ background: 'linear-gradient(160deg, #0d0d2e, #0a0a24)' }}>
+          <div className="p-8">
+            <DialogHeader className="mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                  <Zap className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-xl font-black tracking-tighter text-white">ORBiS</span>
+              </div>
+              <DialogTitle className="text-2xl font-black tracking-tighter text-white">Connexion</DialogTitle>
+              <DialogDescription className="text-indigo-300/50">
+                Accédez à votre plateforme de gestion.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Demo banner */}
+            <div className="mb-5 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-3">
+              <Zap className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs font-bold text-indigo-300 mb-1">Compte démo pré-rempli</p>
+                <p className="text-[11px] text-indigo-400/60 font-mono">{DEMO_CREDENTIALS.email} / {DEMO_CREDENTIALS.password}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="login-email" className="font-semibold text-indigo-200/80 text-sm">Email</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  required
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  className="h-11 rounded-xl bg-white/5 border-white/10 text-white placeholder:text-white/25 focus:border-indigo-500/60"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password" className="font-semibold text-indigo-200/80 text-sm">Mot de passe</Label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  required
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  className="h-11 rounded-xl bg-white/5 border-white/10 text-white placeholder:text-white/25 focus:border-indigo-500/60"
+                />
+              </div>
+
+              {loginError && (
+                <p className="text-xs text-red-400 font-semibold bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {loginError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loginLoading}
+                className="w-full h-12 rounded-xl font-bold bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 border-0 text-white shadow-lg shadow-indigo-500/25 mt-2"
+              >
+                {loginLoading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    Connexion...
+                  </span>
+                ) : (
+                  <>Se connecter <ArrowRight className="w-4 h-4 ml-2" /></>
+                )}
+              </Button>
+            </form>
+
+            <p className="text-center text-xs text-indigo-400/30 mt-5">
+              Données hébergées en France · RGPD · TLS
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
