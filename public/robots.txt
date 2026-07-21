@@ -1,0 +1,21 @@
+User-agent: *
+Allow: /
+Allow: /dashboard
+Allow: /onboarding
+Disallow: /api/
+Disallow: /*.js$
+Disallow: /*.css$
+Disallow: /admin/
+Disallow: /private/
+
+Sitemap: https://fusionbiz.fr/sitemap.xml
+
+# Allow search engines
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Respectful crawl rate
+Crawl-delay: 1
