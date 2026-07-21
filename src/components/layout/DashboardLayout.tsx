@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCompany } from '@/hooks/useCompany';
+import { useAdminMode } from '@/hooks/useAdminMode';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -314,6 +315,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { company } = useCompany();
+  const { clickCount, handleLogoClick } = useAdminMode();
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
   // Auto-expand groups that contain the active route
@@ -355,12 +357,18 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     <div className="sidebar flex flex-col h-full">
       {/* ── Logo ── */}
       <div
-        className="flex items-center gap-3 px-4 h-14 shrink-0 border-b"
+        className="flex items-center gap-3 px-4 h-14 shrink-0 border-b group cursor-pointer transition-all"
         style={{ borderColor: 'hsl(var(--sidebar-border))' }}
+        onClick={handleLogoClick}
       >
-        <Link to="/dashboard" className="flex items-center gap-3 min-w-0 flex-1">
-          <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-gradient-to-br from-[hsl(235_85%_65%)] to-[hsl(262_83%_58%)] shadow-lg shadow-[hsl(235_85%_55%/0.3)]">
+        <Link to="/dashboard" className="flex items-center gap-3 min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+          <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-gradient-to-br from-[hsl(235_85%_65%)] to-[hsl(262_83%_58%)] shadow-lg shadow-[hsl(235_85%_55%/0.3)] relative">
             <Zap className="w-4 h-4 text-white" />
+            {clickCount > 0 && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold text-white">
+                {clickCount}
+              </div>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <div

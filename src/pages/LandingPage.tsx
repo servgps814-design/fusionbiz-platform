@@ -243,6 +243,14 @@ function Navbar({ onCta, isAuthenticated }: { onCta: () => void; isAuthenticated
           >
             {isAuthenticated ? 'Dashboard' : 'Connexion'}
           </Button>
+          {!isAuthenticated && (
+            <Button
+              onClick={() => navigate('/signup')}
+              className="h-9 px-5 rounded-full font-bold text-sm bg-transparent border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/10 hover:border-indigo-400"
+            >
+              S'inscrire
+            </Button>
+          )}
           <Button
             onClick={onCta}
             className="h-9 px-5 rounded-full font-bold text-sm bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 shadow-lg shadow-indigo-500/30 border-0 text-white"
@@ -293,6 +301,14 @@ function Navbar({ onCta, isAuthenticated }: { onCta: () => void; isAuthenticated
                 >
                   {isAuthenticated ? 'Dashboard' : 'Connexion'}
                 </Button>
+                {!isAuthenticated && (
+                  <Button
+                    onClick={() => { navigate('/signup'); setMobileOpen(false); }}
+                    className="w-full justify-center rounded-full font-bold bg-transparent border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/10"
+                  >
+                    S'inscrire
+                  </Button>
+                )}
                 <Button
                   onClick={() => { onCta(); setMobileOpen(false); }}
                   className="w-full justify-center rounded-full font-bold bg-gradient-to-r from-indigo-500 to-violet-600 text-white border-0"
