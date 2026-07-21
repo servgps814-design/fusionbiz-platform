@@ -3,25 +3,78 @@ export type LocalUser = {
   email: string;
   displayName: string;
   phone?: string;
+  isAdmin?: boolean;
 };
+
+export type CompanyStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
 
 export type LocalCompany = {
   id: string;
   name: string;
+  industry: string;
   siret: string;
   address: string;
   legalStatus: string;
-  isVerified: string;
+  website?: string;
   logoUrl?: string;
+  status: CompanyStatus;
+  ownerId: string;
+  createdAt: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  credits: number;
+  subscriptionPlan: 'basic' | 'professional' | 'enterprise';
+};
+
+export type PromotionCode = {
+  id: string;
+  code: string;
+  type: 'percentage' | 'fixed' | 'credits';
+  value: number;
+  maxUses: number;
+  currentUses: number;
+  expiryDate: string;
+  applicableTo: 'all' | 'new' | 'existing';
+  isActive: boolean;
+  createdAt: string;
+};
+
+export type LoyaltyReward = {
+  id: string;
+  companyId: string;
+  type: 'credits' | 'discount' | 'upgrade';
+  value: number;
+  reason: string;
+  givenAt: string;
+  expiryDate?: string;
 };
 
 const DEMO_USER: LocalUser = {
   id: 'demo_user_1',
-  email: 'demo@orbis.fr',
-  displayName: 'Marie Dupont',
+  email: 'admin@fusionbiz.fr',
+  displayName: 'Admin FusionBiz',
+  isAdmin: true,
 };
+
+const DEMO_COMPANY: LocalCompany = {
+  id: 'demo_company_1',
+  name: 'FusionBiz Demo',
+  industry: 'Technology',
+  siret: '12345678900123',
+  address: '123 Rue de Paris, 75001 Paris',
+  legalStatus: 'SARL',
+  website: 'https://demo.fusionbiz.fr',
+  status: 'approved',
+  ownerId: 'demo_user_1',
+  createdAt: new Date().toISOString(),
+  approvedAt: new Date().toISOString(),
+  credits: 1000,
+  subscriptionPlan: 'enterprise',
+};
+
 const DEMO_PASSWORD = 'demo123';
-const AUTH_KEY = 'orbis_auth';
+const AUTH_KEY = 'fusionbiz_auth';
+const ADMIN_KEY = 'fusionbiz_admin';
 
 type AuthListener = (state: { user: LocalUser | null; isLoading: boolean }) => void;
 
@@ -47,6 +100,49 @@ class LocalAuthService {
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener);
     };
+  }
+
+  async signup(email: string, password: string, displayName: string, companyInfo?: Partial<LocalCompany>) {
+    // Check if user already exists
+    const users = this.getStore('users');
+    if (users.find((u: any) => u.email === email)) {
+      throw new Error('Email déjà utilisé');
+    }
+
+    const userId = `user_${Date.now()}`;
+    const companyId = `company_${Date.now()}`;
+
+    const newUser: LocalUser = {
+      id: userId,
+      email,
+      displayName,
+      isAdmin: false,
+    };
+
+    const newCompany: LocalCompany = {
+      id: companyId,
+      name: companyInfo?.name || displayName,
+      industry: companyInfo?.industry || '',
+      siret: companyInfo?.siret || '',
+      address: companyInfo?.address || '',
+      legalStatus: companyInfo?.legalStatus || '',
+      website: companyInfo?.website,
+      status: 'pending',
+      ownerId: userId,
+      createdAt: new Date().toISOString(),
+      credits: 0,
+      subscriptionPlan: 'basic',
+    };
+
+    // Store user and company
+    users.push({ ...newUser, password });
+    this.setStore('users', users);
+
+    const companies = this.getStore('companies');
+    companies.push(newCompany);
+    this.setStore('companies', companies);
+
+    return { user: newUser, company: newCompany };
   }
 
   async login(email?: string, password?: string) {

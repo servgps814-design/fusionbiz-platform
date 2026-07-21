@@ -8,6 +8,8 @@ import { DashboardLayout } from './components/layout/DashboardLayout';
 // ─── Public pages ──────────────────────────────────────────────────────────────
 import { LandingPage } from './pages/LandingPage';
 import { OnboardingPage } from './pages/OnboardingPage';
+import { SignupPage } from './pages/SignupPage';
+import { AdminPage } from './pages/admin/AdminPage';
 
 // ─── Dashboard ─────────────────────────────────────────────────────────────────
 import { Dashboard } from './pages/Dashboard';
@@ -117,6 +119,7 @@ function App() {
       <Routes>
         {/* ── Public ─────────────────────────────────────────────────────── */}
         <Route path="/" element={<LandingPage />} />
+        <Route path="/signup" element={<SignupPage />} />
 
         {/* ── Onboarding (auth required, no company required) ────────────── */}
         <Route
@@ -124,6 +127,16 @@ function App() {
           element={
             <AuthGate>
               <OnboardingPage />
+            </AuthGate>
+          }
+        />
+
+        {/* ── Admin (auth required, admin-only) ──────────────────────────── */}
+        <Route
+          path="/admin"
+          element={
+            <AuthGate>
+              <AdminPage />
             </AuthGate>
           }
         />
