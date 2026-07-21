@@ -1,59 +1,280 @@
-# Enhanced Vite React TypeScript Template
+# 🚀 FusionBiz Platform - Plateforme SaaS d'Entreprise
 
-This template includes built-in detection for missing CSS variables between your Tailwind config and CSS files.
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/servgps814-design/fusionbiz-platform)
+[![License](https://img.shields.io/badge/license-proprietary-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](package.json)
 
-## Features
+Une plateforme SaaS complète et moderne pour la gestion d'entreprise, combinant CRM, facturation, comptabilité, e-commerce, marketing et bien plus.
 
-- **CSS Variable Detection**: Automatically detects if CSS variables referenced in `tailwind.config.cjs` are defined in `src/index.css`
-- **Enhanced Linting**: Includes ESLint, Stylelint, and custom CSS variable validation
-- **Shadcn/ui**: Pre-configured with all Shadcn components
-- **Modern Stack**: Vite + React + TypeScript + Tailwind CSS
+## ✨ Caractéristiques Principales
 
-## Available Scripts
+### 📊 Gestion d'Entreprise Complète
+- **CRM** - Gestion des contacts, leads et opportunités
+- **Facturation** - Création et suivi des factures et devis
+- **Comptabilité** - Gestion des dépenses et TVA
+- **E-commerce** - Gestion de produits et commandes
+- **Marketing** - Campagnes et segmentation d'audience
+- **Analytics** - Tableaux de bord et rapports
+- **Automation** - Workflows automatisés
+- **Delivery** - Gestion de la logistique
+- **B2B** - Portal B2B intégré
+- **Team & Billing** - Gestion d'équipe et facturation
+- **Media & Social** - Gestion de contenu multimédia
+
+### 🛠️ Stack Technologique Moderne
+- **Frontend** : React 18+ avec TypeScript
+- **Build** : Vite pour une performance optimale
+- **Styling** : Tailwind CSS avec composants Shadcn/ui
+- **Backend** : Blink Backend-as-a-Service
+- **Forms** : React Hook Form avec validation Zod
+- **State** : Gestion d'état réactive
+- **UI** : Composants accessibles et animés
+
+### 🔐 Sécurité
+- Authentification sécurisée
+- Headers de sécurité configurés
+- HTTPS obligatoire en production
+- Protection CSRF intégrée
+- Validation des entrées
+
+### ⚡ Performance
+- Lazy loading des routes
+- Code splitting automatique
+- Compression GZIP
+- Service Worker pour offline
+- Cache intelligent
+
+### 📱 Responsive & PWA
+- Design mobile-first
+- Support PWA complet
+- Installation sur appareil
+- Synchronisation offline
+
+## 🚀 Démarrage Rapide
+
+### Prérequis
+- Node.js 18+ ou Bun
+- Git
+
+### Installation
 
 ```bash
-# Run all linting (includes CSS variable check)
+# Cloner le repository
+git clone https://github.com/servgps814-design/fusionbiz-platform.git
+cd fusionbiz-platform
+
+# Installer les dépendances
+npm install
+# ou avec Bun
+bun install
+
+# Configurer les variables d'environnement
+cp .env.example .env.local
+# Éditer .env.local avec vos configurations
+```
+
+### Développement
+
+```bash
+# Démarrer le serveur de développement
+npm run dev
+# ou
+bun run dev
+
+# Accéder à http://localhost:5000
+```
+
+### Linting & Validation
+
+```bash
+# Exécuter tous les linters
 npm run lint
 
-# Check only CSS variables
+# Vérifier les variables CSS
 npm run check:css-vars
 
-# Individual linting
-npm run lint:js    # ESLint
-npm run lint:css   # Stylelint
+# Vérifier les classes CSS
+npm run check:css-classes
 ```
 
-## CSS Variable Detection
+### Build Production
 
-The template includes a custom script that:
+```bash
+# Construire pour la production
+npm run build
 
-1. **Parses `tailwind.config.cjs`** to find all `var(--variable)` references
-2. **Parses `src/index.css`** to find all defined CSS variables (`--variable:`)
-3. **Cross-references** them to find missing definitions
-4. **Reports undefined variables** with clear error messages
+# Prévisualiser le build
+npm run preview
 
-### Example Output
-
-When CSS variables are missing:
-```
-❌ Undefined CSS variables found in tailwind.config.cjs:
-   --sidebar-background
-   --sidebar-foreground
-   --sidebar-primary
-
-Add these variables to src/index.css
+# Vérifier la production
+npm run verify
 ```
 
-When all variables are defined:
+## 📋 Variables d'Environnement
+
+Voir [.env.example](.env.example) pour la liste complète des variables disponibles.
+
+### Variables Essentielles
+
+```env
+# API
+VITE_API_URL=https://api.fusionbiz.fr
+VITE_API_TIMEOUT=30000
+
+# Blink Backend-as-a-Service
+VITE_BLINK_PROJECT_ID=fusionbiz-platform-eqm2kch7
+VITE_BLINK_PUBLISHABLE_KEY=blnk_pk_XXX
+
+# Application
+VITE_APP_NAME=FusionBiz Platform
+VITE_APP_VERSION=1.0.0
+VITE_APP_ENVIRONMENT=production
+
+# Features
+VITE_ENABLE_ANALYTICS=true
+VITE_ENABLE_LOGGING=true
+VITE_ENABLE_ERROR_TRACKING=true
+
+# Monitoring
+VITE_GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX
+VITE_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 ```
-✅ All CSS variables in tailwind.config.cjs are defined
+
+## 📚 Documentation
+
+### Guides Principaux
+
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Guide complet de déploiement
+- **[Architecture](./docs/ARCHITECTURE.md)** - Architecture et structure du projet
+- **[Contributing](./CONTRIBUTING.md)** - Guide de contribution
+- **[Changelog](./CHANGELOG.md)** - Historique des modifications
+
+### Guides Techniques
+
+- [API Integration](./docs/API_INTEGRATION.md)
+- [Authentication](./docs/AUTHENTICATION.md)
+- [Performance](./docs/PERFORMANCE.md)
+- [Security](./docs/SECURITY.md)
+
+## 🔐 Authentification
+
+Par défaut, le système utilise une authentification locale pour le développement :
+
+```
+Email: demo@orbis.fr
+Password: demo123
 ```
 
-## How It Works
+En production, remplacez par votre système d'authentification réel (OAuth, JWT, etc.).
 
-The detection happens during the `npm run lint` command, which will:
-- Exit with error code 1 if undefined variables are found
-- Show exactly which variables need to be added to your CSS file
-- Integrate seamlessly with your development workflow
+## 📊 Données de Démonstration
 
-This prevents runtime CSS issues where Tailwind classes reference undefined CSS variables.
+La plateforme inclut des données de démonstration stockées dans `localStorage`. Pour une application production réelle, connectez-vous à un vrai backend.
+
+## 🐛 Dépannage
+
+### Erreur: "Configuration validation failed"
+```bash
+# Vérifier les variables d'environnement
+cat .env.local
+
+# Reconstruire
+npm run build
+```
+
+### Performance lente
+```bash
+# Analyser le bundle
+npm run preview
+
+# Vérifier avec Lighthouse
+# Dans Chrome DevTools: Lighthouse > Analyze page load
+```
+
+### Service Worker ne fonctionne pas
+- Assurez-vous d'utiliser HTTPS
+- Vérifiez que `/public/sw.js` est accessible
+- Vérifiez la console du navigateur pour les erreurs
+
+## 📝 Scripts Disponibles
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Démarrer le serveur de développement |
+| `npm run build` | Construire pour la production |
+| `npm run preview` | Prévisualiser le build |
+| `npm run lint` | Exécuter tous les linters |
+| `npm run verify` | Vérifier la préparation pour production |
+| `npm run deploy:verify` | Vérification complète avant déploiement |
+
+## 🚀 Déploiement
+
+### Déploiement Rapide sur Vercel (Recommandé)
+
+```bash
+# Installer Vercel CLI
+npm install -g vercel
+
+# Déployer
+vercel deploy --prod
+
+# Ou connecter directement depuis GitHub
+# https://vercel.com/new
+```
+
+Pour un guide complet, voir **[DEPLOYMENT.md](./DEPLOYMENT.md)**.
+
+### Autres Plateformes
+
+- **Netlify** - [Guide Netlify](./docs/DEPLOY_NETLIFY.md)
+- **AWS** - [Guide AWS](./docs/DEPLOY_AWS.md)
+- **Docker** - [Guide Docker](./docs/DEPLOY_DOCKER.md)
+
+## 📊 Monitoring & Analytics
+
+### Google Analytics
+Configurez `VITE_GOOGLE_ANALYTICS_ID` pour activer.
+
+### Sentry (Error Tracking)
+Configurez `VITE_SENTRY_DSN` pour activer.
+
+### Performance Monitoring
+Consultez les métriques Web Vitals dans Google Analytics.
+
+## 🤝 Contribution
+
+Les contributions sont bienvenues ! Veuillez consulter [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## 📄 License
+
+Propriétaire - Tous droits réservés
+
+## 🆘 Support
+
+- 📧 support@fusionbiz.fr
+- 🌐 https://fusionbiz.fr
+- 📚 Documentation: https://docs.fusionbiz.fr
+- 🐛 Issues: https://github.com/servgps814-design/fusionbiz-platform/issues
+
+## ✅ Checklist Pré-Production
+
+Avant de déployer en production :
+
+- [ ] Variables d'environnement configurées
+- [ ] HTTPS activé
+- [ ] Linting et tests passent
+- [ ] Build production réussit
+- [ ] Service Worker fonctionne
+- [ ] Analytics configuré
+- [ ] Monitoring configuré
+- [ ] Backups configurés
+- [ ] Domaine personnalisé configuré
+- [ ] Certificat SSL valide
+
+Exécutez simplement : `npm run deploy:verify`
+
+---
+
+**Fait avec ❤️ par FusionBiz Team**
+
+_Dernière mise à jour: 2026_
